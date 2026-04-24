@@ -169,11 +169,11 @@ const state = {
     endDate: offsetDateString(DEFAULT_START_DATE, 300),
   },
   mainlines: [
-    { chapter: 36, date: offsetDateString(DEFAULT_START_DATE, 50), rateBonus: 2, gateLevel: null },
-    { chapter: 38, date: offsetDateString(DEFAULT_START_DATE, 100), rateBonus: 2, gateLevel: null },
-    { chapter: 40, date: offsetDateString(DEFAULT_START_DATE, 150), rateBonus: 2, gateLevel: null },
-    { chapter: 42, date: offsetDateString(DEFAULT_START_DATE, 200), rateBonus: 2, gateLevel: null },
-    { chapter: 44, date: offsetDateString(DEFAULT_START_DATE, 250), rateBonus: 2, gateLevel: null },
+    { chapter: 36, date: offsetDateString(DEFAULT_START_DATE, 50), rateBonus: 2.5, gateLevel: null },
+    { chapter: 38, date: offsetDateString(DEFAULT_START_DATE, 100), rateBonus: 2.5, gateLevel: null },
+    { chapter: 40, date: offsetDateString(DEFAULT_START_DATE, 150), rateBonus: 2.5, gateLevel: null },
+    { chapter: 42, date: offsetDateString(DEFAULT_START_DATE, 200), rateBonus: 2.5, gateLevel: null },
+    { chapter: 44, date: offsetDateString(DEFAULT_START_DATE, 250), rateBonus: 2.5, gateLevel: null },
   ],
   events: [],
   activityConfig: {
@@ -1176,13 +1176,10 @@ function renderMainlineModal() {
           <input id="mainline-modal-date" class="field-control" type="date" value="${current.date}">
         </label>
         <label class="field col-number col-inline-half">
-          <span class="field-label">小时加成</span>
+          <span class="field-label">芯尘获取增加</span>
           <input id="mainline-modal-rate" class="field-control" type="number" step="0.1" value="${current.rateBonus}">
         </label>
         <label class="field col-number col-inline-half">
-          <span class="field-label">解锁等级</span>
-          <input id="mainline-modal-gate" class="field-control" type="text" value="${current.gateLevel ?? ""}">
-        </label>
       </div>
       <div class="mainline-modal-actions">
         <button class="ghost-btn danger-btn" type="button" id="mainline-modal-delete">删除节点</button>
@@ -1208,10 +1205,6 @@ function renderMainlineModal() {
   bindValue("mainline-modal-rate", (value) => {
     current.rateBonus = Number(value || 0);
   }, { eventName: "change", rerender: true });
-  bindValue("mainline-modal-gate", (value) => {
-    current.gateLevel = parseOptionalInt(value);
-  }, { eventName: "change", rerender: true });
-
   mainlineModalRoot.querySelectorAll('[data-close="modal"]').forEach((node) => {
     node.addEventListener("click", closeMainlineModal);
   });
@@ -1292,7 +1285,7 @@ function renderMainlineTimeline() {
       formatter: (params) => {
         const item = entries.find((entry) => entry.index === params.data.originalIndex);
         if (!item) return "";
-        return `${item.label}<br>${item.date}<br>小时加成：${item.rateBonus}<br>解锁等级：${item.gateLevel ?? "-"}`;
+        return `${item.label}<br>${item.date}<br>芯尘获取增加：${item.rateBonus}`;
       },
     },
     xAxis: {
@@ -1383,7 +1376,7 @@ function renderMainlineTimeline() {
     if (!Array.isArray(next) || !next[0]) return;
     state.mainlines.push({
       date: formatDateInput(new Date(next[0])),
-      rateBonus: 2,
+      rateBonus: 2.5,
       gateLevel: null,
     });
     state.mainlineEditorIndex = state.mainlines.length - 1;
@@ -1400,7 +1393,7 @@ function renderMainlineTimeline() {
 function renderTimelineRows(listId, rows, rowType, onDelete) {
   const host = document.getElementById(listId);
   host.innerHTML = "";
-  renderListHeader(host, "timeline-grid", rowType === "mainline" ? ["更新时间", "小时加成", "解锁等级"] : ["开始日期", "持续天数", "获得箱子"]);
+  renderListHeader(host, "timeline-grid", rowType === "mainline" ? ["更新时间", "芯尘获取增加"] : ["开始日期", "持续天数", "获得箱子"]);
   rows.forEach((row, index) => {
     const card = document.createElement("div");
     card.className = `timeline-card ${rowType}`;
@@ -1409,8 +1402,7 @@ function renderTimelineRows(listId, rows, rowType, onDelete) {
     compactGrid.className = "timeline-grid";
     if (rowType === "mainline") {
       compactGrid.appendChild(createCompactField(row.date, (value) => { row.date = value; }, { type: "date", ariaLabel: "主线更新时间", title: "主线更新时间", compactClass: "is-date", columnClass: "col-date" }));
-      compactGrid.appendChild(createCompactField(row.rateBonus, (value) => { row.rateBonus = value; }, { type: "number", cast: "number", step: "0.1", placeholder: "加成", ariaLabel: "小时加成", title: "小时加成", compactClass: "is-short", columnClass: "col-number" }));
-      compactGrid.appendChild(createCompactField(row.gateLevel, (value) => { row.gateLevel = value; }, { type: "text", cast: "optionalInt", placeholder: "解锁等级", ariaLabel: "解锁等级", title: "解锁等级", compactClass: "is-short", columnClass: "col-gate" }));
+      compactGrid.appendChild(createCompactField(row.rateBonus, (value) => { row.rateBonus = value; }, { type: "number", cast: "number", step: "0.1", placeholder: "增加", ariaLabel: "芯尘获取增加", title: "芯尘获取增加", compactClass: "is-short", columnClass: "col-number" }));
     } else {
       compactGrid.appendChild(createCompactField(row.startDate, (value) => { row.startDate = value; }, { type: "date", ariaLabel: "活动开始日期", title: "活动开始日期", compactClass: "is-date", columnClass: "col-date" }));
       compactGrid.appendChild(createCompactField(row.durationDays, (value) => { row.durationDays = value; }, { type: "number", cast: "number", step: "1", placeholder: "天数", ariaLabel: "活动持续天数", title: "活动持续天数", compactClass: "is-short", columnClass: "col-number" }));
@@ -1621,7 +1613,6 @@ function renderSummaryTable() {
       <td>${row.finalDisplayLevel.toFixed(2)}</td>
       <td>${row.finalBoxes.toFixed(0)}</td>
       <td>${row.totalOpenedBoxes.toFixed(0)}</td>
-      <td>${row.activeGateLevel == null ? "-" : row.activeGateLevel}</td>
     `;
     tr.addEventListener("click", () => {
       state.detailStrategy = row.name;
@@ -1649,7 +1640,6 @@ function renderDetailTable() {
       <td>${row.openedBoxesToday.toFixed(0)}</td>
       <td>${row.dailyDust.toFixed(0)}</td>
       <td>${row.extraDust.toFixed(0)}</td>
-      <td>${row.activeGateLevel == null ? "-" : row.activeGateLevel}</td>
       <td>${row.strategyNote || ""}</td>
     `;
     body.appendChild(tr);
