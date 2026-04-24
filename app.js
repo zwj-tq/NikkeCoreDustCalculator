@@ -20,11 +20,39 @@ const STRATEGY_TYPES = [
   "SMART_VALUE_GATE",
 ];
 
+const CORE_DUST_BREAKPOINTS = [
+  { nextLevel: 11, cost: 20 },
+  { nextLevel: 21, cost: 40 },
+  { nextLevel: 41, cost: 80 },
+  { nextLevel: 61, cost: 400 },
+  { nextLevel: 81, cost: 1000 },
+  { nextLevel: 101, cost: 2000 },
+  { nextLevel: 121, cost: 4500 },
+  { nextLevel: 141, cost: 7000 },
+  { nextLevel: 161, cost: 7000 },
+  { nextLevel: 181, cost: 8000 },
+];
+
+const CORE_DUST_RANGES = [
+  { from: 201, to: 250, cost: 10000 },
+  { from: 251, to: 300, cost: 10000 },
+  { from: 301, to: 350, cost: 10000 },
+  { from: 351, to: 400, cost: 11000 },
+  { from: 401, to: 450, cost: 12000 },
+  { from: 451, to: 500, cost: 13000 },
+  { from: 501, to: 550, cost: 14000 },
+  { from: 551, to: 600, cost: 15000 },
+  { from: 601, to: 650, cost: 16000 },
+  { from: 651, to: 700, cost: 17000 },
+  { from: 701, to: 750, cost: 18000 },
+  { from: 751, to: 800, cost: 19000 },
+  { from: 801, to: 9999, cost: 20000 },
+];
+
 const state = {
   params: {
     startLevel: 378,
     startProgress: 0,
-    levelCost: 11000,
     startHourlyRate: 79,
     startBoxes: 1800,
     target102Rate: 102,
@@ -33,7 +61,6 @@ const state = {
     baseDailyHours: 24,
     freeSweeps: 1,
     paidSweeps: 2,
-    hoursPerSweep: 2,
     firstBigLevel: 381,
     bigInterval: 20,
     bigRateBonus: 1.5,
@@ -64,21 +91,17 @@ const state = {
   ],
   results: {},
   summaries: [],
-  baselineStrategy: "",
-  compareCandidate: "",
-  compareStrategies: [],
   detailStrategy: "",
 };
 
 const lineChart = echarts.init(document.getElementById("line-chart"));
 const barChart = echarts.init(document.getElementById("bar-chart"));
 const statusText = document.getElementById("status-text");
-const baselineSelect = document.getElementById("baseline-select");
-const compareCandidateSelect = document.getElementById("compare-candidate-select");
 const detailStrategySelect = document.getElementById("detail-strategy-select");
+const pageNavList = document.getElementById("page-nav-list");
 
 function dailyHours() {
-  return state.params.baseDailyHours + (state.params.freeSweeps + state.params.paidSweeps) * state.params.hoursPerSweep;
+  return state.params.baseDailyHours + (state.params.freeSweeps + state.params.paidSweeps) * 2;
 }
 
 function parseOptionalInt(value) {
@@ -103,15 +126,17 @@ function normalizeFrequency(value) {
   return text;
 }
 
+function getCoreDustCostForNextLevel(currentLevel) {
+  const nextLevel = currentLevel + 1;
+  const breakpoint = CORE_DUST_BREAKPOINTS.find((item) => item.nextLevel === nextLevel);
+  if (breakpoint) return breakpoint.cost;
+  const range = CORE_DUST_RANGES.find((item) => nextLevel >= item.from && nextLevel <= item.to);
+  return range ? range.cost : 0;
+}
+
 function milestoneCount(level) {
   if (level < state.params.firstBigLevel) return 0;
   return Math.floor((level - state.params.firstBigLevel) / state.params.bigInterval) + 1;
-}
-
-function levelFromTotalRed(totalRed) {
-  const levelsGained = Math.floor(totalRed / state.params.levelCost);
-  const progress = totalRed - levelsGained * state.params.levelCost;
-  return { level: state.params.startLevel + levelsGained, progress };
 }
 
 function computeBaseHourlyRate(level, mainlineBonus, unlocked102) {
@@ -130,17 +155,48 @@ function isExtraTriggered(extra, day) {
   return false;
 }
 
-function redNeededForLevel(targetLevel, totalRed) {
-  const current = levelFromTotalRed(totalRed);
-  if (targetLevel <= current.level) return 0;
-  const targetTotal = (targetLevel - state.params.startLevel) * state.params.levelCost;
-  return Math.max(0, targetTotal - totalRed);
+function normalizeLevelProgress(level, progress) {
+  let currentLevel = level;
+  let currentProgress = progress;
+  while (true) {
+    const cost = getCoreDustCostForNextLevel(currentLevel);
+    if (cost === 0) {
+      currentLevel += 1;
+      continue;
+    }
+    if (currentProgress >= cost) {
+      currentProgress -= cost;
+      currentLevel += 1;
+      continue;
+    }
+    break;
+  }
+  return { level: currentLevel, progress: currentProgress };
 }
 
-function boxesNeededForLevel(targetLevel, totalRed, boxRate) {
-  const neededRed = redNeededForLevel(targetLevel, totalRed);
-  if (neededRed <= 0 || boxRate <= 0) return 0;
-  return Math.ceil(neededRed / boxRate);
+function dustNeededForTargetLevel(targetLevel, currentLevel, currentProgress) {
+  if (targetLevel <= currentLevel) return 0;
+  let tempLevel = currentLevel;
+  let tempProgress = currentProgress;
+  let needed = 0;
+  while (tempLevel < targetLevel) {
+    const cost = getCoreDustCostForNextLevel(tempLevel);
+    if (cost === 0) {
+      tempLevel += 1;
+      tempProgress = 0;
+      continue;
+    }
+    needed += Math.max(0, cost - tempProgress);
+    tempLevel += 1;
+    tempProgress = 0;
+  }
+  return needed;
+}
+
+function boxesNeededForTargetLevel(targetLevel, currentLevel, currentProgress, boxRate) {
+  const neededDust = dustNeededForTargetLevel(targetLevel, currentLevel, currentProgress);
+  if (neededDust <= 0 || boxRate <= 0) return 0;
+  return Math.ceil(neededDust / boxRate);
 }
 
 function nextMilestoneLevel(level) {
@@ -170,15 +226,16 @@ function shouldOpenFor102ByValue(currentDay, currentHourlyRate, boxesNeeded, cur
   };
 }
 
-function openBoxes(totalRed, boxes, count, boxRate) {
+function openBoxes(progressDust, boxes, count, boxRate) {
   const actual = Math.min(Math.max(0, count), boxes);
-  const gainedRed = actual * Math.max(0, boxRate);
-  return { totalRed: totalRed + gainedRed, boxes: boxes - actual, gainedRed, actual };
+  const gainedDust = actual * Math.max(0, boxRate);
+  return { progressDust: progressDust + gainedDust, boxes: boxes - actual, gainedDust, actual };
 }
 
 function simulate(strategy) {
   const states = [];
-  let totalRed = state.params.startProgress;
+  let level = state.params.startLevel;
+  let progressDust = state.params.startProgress;
   let boxes = state.params.startBoxes;
   let mainlineBonus = 0;
   let unlocked102 = false;
@@ -200,10 +257,12 @@ function simulate(strategy) {
   const futureGateDays = state.mainlines.filter((item) => item.enabled && item.gateLevel != null).map((item) => item.day);
   const seenUpdates = [];
 
+  ({ level, progress: progressDust } = normalizeLevelProgress(level, progressDust));
+
   for (let day = 0; day <= state.params.simulateDays; day += 1) {
     let strategyNote = "";
     let openedBoxesToday = 0;
-    let redFromBoxesToday = 0;
+    let dustFromBoxesToday = 0;
 
     const activityBoxes = (eventsByDay.get(day) || []).reduce((sum, event) => sum + Number(event.boxes || 0), 0);
     boxes += activityBoxes;
@@ -213,67 +272,66 @@ function simulate(strategy) {
       seenUpdates.push(update);
     });
 
-    let { level } = levelFromTotalRed(totalRed);
     let activeGateLevel = findActiveGateLevel(seenUpdates);
     let hourlyRate = computeBaseHourlyRate(level, mainlineBonus, unlocked102);
     const currentBoxRate = hourlyRate;
     const isGateDay = (mainlineByDay.get(day) || []).some((update) => update.gateLevel != null);
 
     if (strategy.type === "OPEN_ALL_NOW" && day === 0 && boxes > 0) {
-      const result = openBoxes(totalRed, boxes, boxes, currentBoxRate);
-      totalRed = result.totalRed;
+      const result = openBoxes(progressDust, boxes, boxes, currentBoxRate);
+      progressDust = result.progressDust;
       boxes = result.boxes;
       openedBoxesToday += result.actual;
-      redFromBoxesToday += result.gainedRed;
+      dustFromBoxesToday += result.gainedDust;
       strategyNote = "第0天全开";
     } else if (strategy.type === "CUSTOM_GATE" && strategy.targetDay === day && strategy.targetLevel) {
-      const needBoxes = boxesNeededForLevel(strategy.targetLevel, totalRed, currentBoxRate);
+      const needBoxes = boxesNeededForTargetLevel(strategy.targetLevel, level, progressDust, currentBoxRate);
       if (needBoxes > 0 && needBoxes <= boxes) {
-        const result = openBoxes(totalRed, boxes, needBoxes, currentBoxRate);
-        totalRed = result.totalRed;
+        const result = openBoxes(progressDust, boxes, needBoxes, currentBoxRate);
+        progressDust = result.progressDust;
         boxes = result.boxes;
         openedBoxesToday += result.actual;
-        redFromBoxesToday += result.gainedRed;
+        dustFromBoxesToday += result.gainedDust;
         strategyNote = `精准补到 ${strategy.targetLevel}`;
       }
     } else if (strategy.type === "SMART_GATE" && isGateDay && activeGateLevel) {
-      const needBoxes = boxesNeededForLevel(activeGateLevel, totalRed, currentBoxRate);
+      const needBoxes = boxesNeededForTargetLevel(activeGateLevel, level, progressDust, currentBoxRate);
       if (needBoxes > 0 && needBoxes <= boxes) {
-        const result = openBoxes(totalRed, boxes, needBoxes, currentBoxRate);
-        totalRed = result.totalRed;
+        const result = openBoxes(progressDust, boxes, needBoxes, currentBoxRate);
+        progressDust = result.progressDust;
         boxes = result.boxes;
         openedBoxesToday += result.actual;
-        redFromBoxesToday += result.gainedRed;
+        dustFromBoxesToday += result.gainedDust;
         strategyNote = `主线日补到门槛 ${activeGateLevel}`;
       }
     } else if (strategy.type === "SMART_VALUE_GATE" && isGateDay && activeGateLevel) {
-      const needBoxes = boxesNeededForLevel(activeGateLevel, totalRed, currentBoxRate);
+      const needBoxes = boxesNeededForTargetLevel(activeGateLevel, level, progressDust, currentBoxRate);
       if (needBoxes > 0 && needBoxes <= boxes) {
         const judge = shouldOpenFor102ByValue(day, hourlyRate, needBoxes, activeGateLevel, futureGateDays);
         strategyNote = judge.note;
         if (judge.shouldOpen) {
-          const result = openBoxes(totalRed, boxes, needBoxes, currentBoxRate);
-          totalRed = result.totalRed;
+          const result = openBoxes(progressDust, boxes, needBoxes, currentBoxRate);
+          progressDust = result.progressDust;
           boxes = result.boxes;
           openedBoxesToday += result.actual;
-          redFromBoxesToday += result.gainedRed;
+          dustFromBoxesToday += result.gainedDust;
           strategyNote = `价值判断通过，补到门槛 ${activeGateLevel}; ${judge.note}`;
         }
       }
     } else if (strategy.type === "OPEN_EVERY_MILESTONE") {
       const milestoneLevel = nextMilestoneLevel(level);
-      const needBoxes = boxesNeededForLevel(milestoneLevel, totalRed, currentBoxRate);
+      const needBoxes = boxesNeededForTargetLevel(milestoneLevel, level, progressDust, currentBoxRate);
       if (needBoxes > 0 && needBoxes <= boxes) {
-        const result = openBoxes(totalRed, boxes, needBoxes, currentBoxRate);
-        totalRed = result.totalRed;
+        const result = openBoxes(progressDust, boxes, needBoxes, currentBoxRate);
+        progressDust = result.progressDust;
         boxes = result.boxes;
         openedBoxesToday += result.actual;
-        redFromBoxesToday += result.gainedRed;
+        dustFromBoxesToday += result.gainedDust;
         strategyNote = `补到大档 ${milestoneLevel}`;
       }
     }
 
-    level = levelFromTotalRed(totalRed).level;
+    ({ level, progress: progressDust } = normalizeLevelProgress(level, progressDust));
     activeGateLevel = findActiveGateLevel(seenUpdates);
     if (!unlocked102 && activeGateLevel != null && level >= activeGateLevel) {
       unlocked102 = true;
@@ -284,31 +342,32 @@ function simulate(strategy) {
     hourlyRate = computeBaseHourlyRate(level, mainlineBonus, unlocked102);
 
     if (strategy.type === "NO_BOX" && unlocked102 && boxes > 0) {
-      const result = openBoxes(totalRed, boxes, boxes, hourlyRate);
-      totalRed = result.totalRed;
+      const result = openBoxes(progressDust, boxes, boxes, hourlyRate);
+      progressDust = result.progressDust;
       boxes = result.boxes;
       openedBoxesToday += result.actual;
-      redFromBoxesToday += result.gainedRed;
+      dustFromBoxesToday += result.gainedDust;
       strategyNote = "102后全开";
     }
 
-    const dailyRedball = hourlyRate * dailyHours();
-    const extraRedball = activeExtras.reduce((sum, extra) => sum + (isExtraTriggered(extra, day) ? Number(extra.amount || 0) : 0), 0);
-    totalRed += dailyRedball + extraRedball;
+    const dailyDust = hourlyRate * dailyHours();
+    const extraDust = activeExtras.reduce((sum, extra) => sum + (isExtraTriggered(extra, day) ? Number(extra.amount || 0) : 0), 0);
+    progressDust += dailyDust + extraDust;
+    ({ level, progress: progressDust } = normalizeLevelProgress(level, progressDust));
 
-    const current = levelFromTotalRed(totalRed);
+    const nextCost = getCoreDustCostForNextLevel(level);
     states.push({
       day,
-      level: current.level,
-      progress: current.progress,
-      displayLevel: current.level + current.progress / state.params.levelCost,
-      totalRed,
+      level,
+      progressDust,
+      nextCost,
+      displayLevel: nextCost > 0 ? level + progressDust / nextCost : level,
       hourlyRate,
       boxes,
       openedBoxesToday,
-      redFromBoxesToday,
-      dailyRedball,
-      extraRedball,
+      dustFromBoxesToday,
+      dailyDust,
+      extraDust,
       activityBoxes,
       mainlineBonus,
       activeGateLevel,
@@ -339,37 +398,26 @@ function buildSummaries() {
     .sort((a, b) => b.finalDisplayLevel - a.finalDisplayLevel);
 }
 
-function comparedStrategyNames() {
-  const names = [];
-  if (state.baselineStrategy) names.push(state.baselineStrategy);
-  state.compareStrategies.forEach((name) => {
-    if (name && !names.includes(name)) names.push(name);
-  });
-  return names;
-}
-
 function renderParams() {
   const host = document.getElementById("params-form");
   host.innerHTML = "";
   const fields = [
     ["初始等级", "startLevel"],
     ["当前级内进度", "startProgress"],
-    ["每级所需红球", "levelCost"],
-    ["当前小时红球", "startHourlyRate"],
-    ["初始红球箱", "startBoxes"],
+    ["当前小时芯尘", "startHourlyRate"],
+    ["初始芯尘箱", "startBoxes"],
     ["102目标小时量", "target102Rate"],
     ["模拟天数", "simulateDays"],
     ["每月周期天数", "monthDays"],
     ["基础日常小时", "baseDailyHours"],
     ["免费扫荡次数", "freeSweeps"],
     ["购买扫荡次数", "paidSweeps"],
-    ["每次扫荡小时", "hoursPerSweep"],
   ];
 
   fields.forEach(([label, key]) => {
-    const item = document.createElement("label");
-    item.className = "field";
-    item.innerHTML = `<span>${label}</span>`;
+    const field = document.createElement("label");
+    field.className = "field";
+    field.innerHTML = `<span>${label}</span>`;
     const input = document.createElement("input");
     input.type = "number";
     input.value = state.params[key];
@@ -377,20 +425,36 @@ function renderParams() {
       state.params[key] = Number(event.target.value || 0);
       renderParams();
       renderMetrics();
+      renderDustReference();
     });
-    item.appendChild(input);
-    host.appendChild(item);
+    field.appendChild(input);
+    host.appendChild(field);
   });
 
   [
     ["自动计算的每日小时数", dailyHours().toFixed(1)],
     ["首个大档等级", state.params.firstBigLevel],
     ["大档间隔", state.params.bigInterval],
+    ["当前等级下一级芯尘", getCoreDustCostForNextLevel(state.params.startLevel)],
   ].forEach(([label, value]) => {
-    const item = document.createElement("label");
-    item.className = "field";
-    item.innerHTML = `<span>${label}</span><input value="${value}" disabled>`;
-    host.appendChild(item);
+    const field = document.createElement("label");
+    field.className = "field";
+    field.innerHTML = `<span>${label}</span><input value="${value}" disabled>`;
+    host.appendChild(field);
+  });
+
+  document.getElementById("daily-hours-label").textContent = `${dailyHours().toFixed(1)} 小时`;
+}
+
+function renderDustReference() {
+  const rangeBody = document.getElementById("dust-range-body");
+  rangeBody.innerHTML = "";
+
+  CORE_DUST_RANGES.forEach((row) => {
+    const label = row.to >= 9999 ? `${row.from}+` : `${row.from}-${row.to}`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${label}</td><td>${row.cost}</td>`;
+    rangeBody.appendChild(tr);
   });
 }
 
@@ -483,7 +547,6 @@ function renderTimelineRows(listId, rows, rowType, onDelete) {
 
     const grid = document.createElement("div");
     grid.className = "timeline-grid";
-
     if (rowType === "mainline") {
       grid.appendChild(createField("序号", row.index, (value) => { row.index = value; }, { type: "number", cast: "number" }));
       grid.appendChild(createField("天数", row.day, (value) => { row.day = value; }, { type: "number", cast: "number" }));
@@ -498,7 +561,6 @@ function renderTimelineRows(listId, rows, rowType, onDelete) {
       grid.appendChild(createField("启用", row.enabled, (value) => { row.enabled = value; }, { type: "checkbox" }));
       grid.appendChild(createField("备注", row.note, (value) => { row.note = value; }, { type: "text", long: true }));
     }
-
     card.appendChild(grid);
     host.appendChild(card);
   });
@@ -509,46 +571,33 @@ function renderEditors() {
     state.mainlines.splice(index, 1);
     renderEditors();
   });
-
   renderTimelineRows("events-list", state.events, "event", (index) => {
     state.events.splice(index, 1);
     renderEditors();
   });
-
-  renderGenericRows(
-    "extras-list",
-    state.extras,
-    [
-      { key: "name", label: "名称", type: "text" },
-      { key: "startDay", label: "开始", type: "number", cast: "number" },
-      { key: "endDay", label: "结束", type: "number", cast: "number" },
-      { key: "frequency", label: "类型", type: "select", options: EXTRA_FREQUENCIES },
-      { key: "amount", label: "红球", type: "number", cast: "number" },
-      { key: "enabled", label: "启用", type: "checkbox" },
-      { key: "note", label: "备注", type: "text", fullSpan: true },
-    ],
-    (index) => {
-      state.extras.splice(index, 1);
-      renderEditors();
-    },
-  );
-
-  renderGenericRows(
-    "strategies-list",
-    state.strategies,
-    [
-      { key: "name", label: "名称", type: "text" },
-      { key: "type", label: "类型", type: "select", options: STRATEGY_TYPES },
-      { key: "targetDay", label: "目标天", type: "text", cast: "optionalInt" },
-      { key: "targetLevel", label: "目标级", type: "text", cast: "optionalInt" },
-      { key: "enabled", label: "启用", type: "checkbox" },
-      { key: "note", label: "备注", type: "text", fullSpan: true },
-    ],
-    (index) => {
-      state.strategies.splice(index, 1);
-      renderEditors();
-    },
-  );
+  renderGenericRows("extras-list", state.extras, [
+    { key: "name", label: "名称", type: "text" },
+    { key: "startDay", label: "开始", type: "number", cast: "number" },
+    { key: "endDay", label: "结束", type: "number", cast: "number" },
+    { key: "frequency", label: "类型", type: "select", options: EXTRA_FREQUENCIES },
+    { key: "amount", label: "芯尘", type: "number", cast: "number" },
+    { key: "enabled", label: "启用", type: "checkbox" },
+    { key: "note", label: "备注", type: "text", fullSpan: true },
+  ], (index) => {
+    state.extras.splice(index, 1);
+    renderEditors();
+  });
+  renderGenericRows("strategies-list", state.strategies, [
+    { key: "name", label: "名称", type: "text" },
+    { key: "type", label: "类型", type: "select", options: STRATEGY_TYPES },
+    { key: "targetDay", label: "目标天", type: "text", cast: "optionalInt" },
+    { key: "targetLevel", label: "目标级", type: "text", cast: "optionalInt" },
+    { key: "enabled", label: "启用", type: "checkbox" },
+    { key: "note", label: "备注", type: "text", fullSpan: true },
+  ], (index) => {
+    state.strategies.splice(index, 1);
+    renderEditors();
+  });
 }
 
 function renderMetrics() {
@@ -556,13 +605,13 @@ function renderMetrics() {
   host.innerHTML = "";
   const best = state.summaries[0];
   const unlockDays = state.summaries.map((item) => item.unlockDay).filter((item) => item != null);
-  const items = [
+  const nextCost = getCoreDustCostForNextLevel(state.params.startLevel);
+  [
     ["当前最佳策略", best ? best.name : "--"],
     ["最高最终等级", best ? best.finalDisplayLevel.toFixed(2) : "--"],
     ["最快 102 开启", unlockDays.length ? `第 ${Math.min(...unlockDays)} 天` : "-"],
-    ["策略数量", String(state.summaries.length)],
-  ];
-  items.forEach(([title, value]) => {
+    ["当前下一级芯尘", String(nextCost)],
+  ].forEach(([title, value]) => {
     const card = document.createElement("div");
     card.className = "metric-card";
     card.innerHTML = `<div class="metric-title">${title}</div><div class="metric-value">${value}</div>`;
@@ -588,51 +637,15 @@ function fillSelect(select, options, value, allowEmpty = false) {
   if (!options.includes(value) && allowEmpty) select.value = "";
 }
 
-function syncCompareSelectors() {
-  const names = state.summaries.map((item) => item.name);
-  if (!state.baselineStrategy && names.length) state.baselineStrategy = names[0];
-  if (!names.includes(state.baselineStrategy)) state.baselineStrategy = names[0] || "";
-  if (!state.detailStrategy && names.length) state.detailStrategy = names[0];
-  if (!names.includes(state.detailStrategy)) state.detailStrategy = names[0] || "";
-  state.compareStrategies = state.compareStrategies.filter((name) => names.includes(name) && name !== state.baselineStrategy);
-
-  fillSelect(baselineSelect, names, state.baselineStrategy, true);
-  fillSelect(compareCandidateSelect, names.filter((name) => name !== state.baselineStrategy && !state.compareStrategies.includes(name)), state.compareCandidate, true);
-  fillSelect(detailStrategySelect, names, state.detailStrategy, true);
-
-  const chips = document.getElementById("compare-chips");
-  chips.innerHTML = "";
-  state.compareStrategies.forEach((name) => {
-    const chip = document.createElement("div");
-    chip.className = "chip";
-    chip.innerHTML = `<span>${name}</span>`;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = "×";
-    btn.addEventListener("click", () => {
-      state.compareStrategies = state.compareStrategies.filter((item) => item !== name);
-      syncCompareSelectors();
-      renderCharts();
-    });
-    chip.appendChild(btn);
-    chips.appendChild(chip);
-  });
-}
-
-function comparedNames() {
-  const names = [];
-  if (state.baselineStrategy) names.push(state.baselineStrategy);
-  state.compareStrategies.forEach((name) => {
-    if (name && !names.includes(name)) names.push(name);
-  });
-  return names;
+function activeStrategyNames() {
+  return state.summaries.map((item) => item.name);
 }
 
 function renderCharts() {
-  const names = comparedNames();
+  const names = activeStrategyNames();
   if (!names.length) {
     lineChart.setOption({ title: { text: "运行模拟后显示策略曲线", left: "center", top: "middle" }, series: [] }, true);
-    barChart.setOption({ title: { text: "暂无对比数据", left: "center", top: "middle" }, series: [] }, true);
+    barChart.setOption({ title: { text: "暂无可显示的策略", left: "center", top: "middle" }, series: [] }, true);
     return;
   }
 
@@ -676,15 +689,14 @@ function renderCharts() {
     series: lineSeries,
   }, true);
 
-  const barRows = state.summaries.filter((row) => names.includes(row.name));
   barChart.setOption({
     grid: { left: 56, right: 24, top: 26, bottom: 70 },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-    xAxis: { type: "category", data: barRows.map((row) => row.name), axisLabel: { rotate: 16 } },
+    xAxis: { type: "category", data: state.summaries.map((row) => row.name), axisLabel: { rotate: 16 } },
     yAxis: { type: "value", name: "最终等级" },
     series: [{
       type: "bar",
-      data: barRows.map((row, index) => ({
+      data: state.summaries.map((row, index) => ({
         value: Number(row.finalDisplayLevel.toFixed(4)),
         itemStyle: { color: CHART_COLORS[index % CHART_COLORS.length] },
       })),
@@ -708,10 +720,9 @@ function renderSummaryTable() {
     `;
     tr.addEventListener("click", () => {
       state.detailStrategy = row.name;
-      syncCompareSelectors();
+      fillSelect(detailStrategySelect, activeStrategyNames(), state.detailStrategy, true);
       renderSummaryTable();
       renderDetailTable();
-      renderCharts();
     });
     body.appendChild(tr);
   });
@@ -725,12 +736,14 @@ function renderDetailTable() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${row.day}</td>
-      <td>${row.displayLevel.toFixed(2)}</td>
+      <td>${row.level}</td>
+      <td>${row.progressDust.toFixed(0)}</td>
+      <td>${row.nextCost}</td>
       <td>${row.hourlyRate.toFixed(2)}</td>
       <td>${row.boxes.toFixed(0)}</td>
       <td>${row.openedBoxesToday.toFixed(0)}</td>
-      <td>${row.dailyRedball.toFixed(0)}</td>
-      <td>${row.extraRedball.toFixed(0)}</td>
+      <td>${row.dailyDust.toFixed(0)}</td>
+      <td>${row.extraDust.toFixed(0)}</td>
       <td>${row.activeGateLevel == null ? "-" : row.activeGateLevel}</td>
       <td>${row.unlocked102 ? "是" : "否"}</td>
       <td>${row.strategyNote || ""}</td>
@@ -751,7 +764,10 @@ function runSimulation() {
       state.results[strategy.name] = simulate(strategy);
     });
     state.summaries = buildSummaries();
-    syncCompareSelectors();
+    if (!state.detailStrategy || !state.summaries.some((item) => item.name === state.detailStrategy)) {
+      state.detailStrategy = state.summaries[0]?.name || "";
+    }
+    fillSelect(detailStrategySelect, activeStrategyNames(), state.detailStrategy, true);
     renderMetrics();
     renderCharts();
     renderSummaryTable();
@@ -770,17 +786,18 @@ function exportCurrentCSV() {
     return;
   }
   const data = [
-    ["day", "level", "progress", "display_level", "hourly_rate", "boxes", "opened_boxes_today", "daily_redball", "extra_redball", "activity_boxes", "mainline_bonus", "active_gate_level", "updates_seen", "unlocked_102", "unlock_day", "strategy_note"],
+    ["day", "level", "progress_dust", "next_level_cost", "display_level", "hourly_rate", "boxes", "opened_boxes_today", "daily_dust", "extra_dust", "activity_boxes", "mainline_bonus", "active_gate_level", "updates_seen", "unlocked_102", "unlock_day", "strategy_note"],
     ...rows.map((row) => [
       row.day,
       row.level,
-      row.progress.toFixed(2),
+      row.progressDust.toFixed(2),
+      row.nextCost,
       row.displayLevel.toFixed(4),
       row.hourlyRate.toFixed(2),
       row.boxes.toFixed(0),
       row.openedBoxesToday.toFixed(0),
-      row.dailyRedball.toFixed(2),
-      row.extraRedball.toFixed(2),
+      row.dailyDust.toFixed(2),
+      row.extraDust.toFixed(2),
       row.activityBoxes.toFixed(2),
       row.mainlineBonus.toFixed(2),
       row.activeGateLevel ?? "",
@@ -815,7 +832,39 @@ function bindCollapsible() {
       section.classList.toggle("is-open");
       const icon = section.querySelector(".collapse-icon");
       icon.textContent = section.classList.contains("is-open") ? "−" : "+";
+      updateActiveNav();
     });
+  });
+}
+
+function buildPageNav() {
+  pageNavList.innerHTML = "";
+  document.querySelectorAll("[data-nav-label]").forEach((section) => {
+    const id = section.id;
+    const label = section.dataset.navLabel;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "page-nav-link";
+    button.dataset.target = id;
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      const top = section.getBoundingClientRect().top + window.scrollY - 120;
+      window.scrollTo({ top, behavior: "smooth" });
+    });
+    pageNavList.appendChild(button);
+  });
+}
+
+function updateActiveNav() {
+  const sections = [...document.querySelectorAll("[data-nav-label]")];
+  if (!sections.length) return;
+  const pivot = window.scrollY + 180;
+  let activeId = sections[0].id;
+  sections.forEach((section) => {
+    if (section.offsetTop <= pivot) activeId = section.id;
+  });
+  document.querySelectorAll(".page-nav-link").forEach((link) => {
+    link.classList.toggle("active", link.dataset.target === activeId);
   });
 }
 
@@ -835,42 +884,25 @@ function bindEvents() {
     });
   });
 
-  baselineSelect.addEventListener("change", (event) => {
-    state.baselineStrategy = event.target.value;
-    state.compareStrategies = state.compareStrategies.filter((name) => name !== state.baselineStrategy);
-    syncCompareSelectors();
-    renderCharts();
-  });
-
-  compareCandidateSelect.addEventListener("change", (event) => {
-    state.compareCandidate = event.target.value;
-  });
-
   detailStrategySelect.addEventListener("change", (event) => {
     state.detailStrategy = event.target.value;
     renderSummaryTable();
     renderDetailTable();
-    renderCharts();
-  });
-
-  document.getElementById("add-compare-btn").addEventListener("click", () => {
-    if (!state.compareCandidate) return;
-    if (state.compareCandidate === state.baselineStrategy) return;
-    if (state.compareStrategies.includes(state.compareCandidate)) return;
-    state.compareStrategies.push(state.compareCandidate);
-    state.compareCandidate = "";
-    syncCompareSelectors();
-    renderCharts();
   });
 
   window.addEventListener("resize", () => {
     lineChart.resize();
     barChart.resize();
+    updateActiveNav();
   });
+  window.addEventListener("scroll", updateActiveNav, { passive: true });
 }
 
+buildPageNav();
 bindCollapsible();
 bindEvents();
 renderParams();
+renderDustReference();
 renderEditors();
 runSimulation();
+updateActiveNav();

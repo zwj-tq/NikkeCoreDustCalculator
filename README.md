@@ -42,6 +42,15 @@ https://tianqing02.github.io/NikkeCoreDustCalculator/
 2. 在仓库 `Settings -> Pages` 中选择部署分支。
 3. 如果使用仓库根目录作为发布目录，则入口文件为 `index.html`。
 
+## 数据来源与鸣谢
+
+部分规则整理与数值校对参考了 NIKKE 相关社区工具与资料。
+
+感谢：
+
+- NIKKE Outpost  
+  https://nikkeoutpost.netlify.app/
+
 ## 说明
 
 当前项目重点在于：
