@@ -6,7 +6,7 @@
 
 GitHub Pages 地址：
 
-https://tianqing02.github.io/NikkeCoreDustCalculator/
+https://zwj-tq.github.io/NikkeCoreDustCalculator/
 
 ## 项目说明
 
