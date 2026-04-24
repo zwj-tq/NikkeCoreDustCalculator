@@ -39,6 +39,18 @@ const FIXED_BIG_INTERVAL = 20;
 const DEFAULT_START_DATE = new Date().toISOString().slice(0, 10);
 const NIKKE_REMOTE_BASE = "https://nikkeoutpost.netlify.app";
 const FALLBACK_NIKKE_DATA = window.NIKKE_DATA_SNAPSHOT || null;
+const PARAMS_STORAGE_KEY = "nikke_calc_params";
+const PERSISTED_PARAM_KEYS = [
+  "startLevel",
+  "startBoxes",
+  "latestMainlineChapter",
+  "currentNormalStageId",
+  "currentHardStageId",
+  "simulateDays",
+  "paidSweeps",
+  "startDate",
+  "endDate",
+];
 
 const CORE_DUST_BREAKPOINTS = [
   { nextLevel: 11, cost: 20 },
@@ -91,8 +103,31 @@ function offsetDateString(baseText, days) {
   return formatDateInput(next);
 }
 
+function syncDateRange(changedKey) {
+  const start = parseDateInput(state.params.startDate);
+  const end = parseDateInput(state.params.endDate);
+  const days = toFiniteNumber(state.params.simulateDays, 0);
+
+  if (changedKey === "startDate") {
+    if (!start) return;
+    state.params.endDate = offsetDateString(state.params.startDate, days);
+    return;
+  }
+
+  if (changedKey === "endDate") {
+    if (!start || !end) return;
+    state.params.simulateDays = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+    return;
+  }
+
+  if (changedKey === "simulateDays") {
+    if (!start) return;
+    state.params.endDate = offsetDateString(state.params.startDate, days);
+  }
+}
+
 function mainlineChapterForIndex(index) {
-  return Number(state.params.currentMainlineChapter || 34) + 2 + index * 2;
+  return Number(state.params.latestMainlineChapter || 34) + 2 + index * 2;
 }
 
 function formatMainlineLabel(chapter) {
@@ -118,18 +153,20 @@ function syncMainlineChaptersByDate() {
 
 const state = {
   params: {
-    startLevel: 378,
+    startLevel: "",
     startProgress: 0,
-    startHourlyRate: 79,
-    startBoxes: 1800,
+    startHourlyRate: "",
+    startBoxes: "",
+    latestMainlineChapter: "",
     currentNormalStageId: "",
     currentHardStageId: "",
-    currentBaseLevel: 1,
-    currentMainlineChapter: 34,
+    currentBaseLevel: "",
+    currentMainlineChapter: "",
     simulateDays: 300,
     paidSweeps: 2,
     bigRateBonus: 1.5,
     startDate: DEFAULT_START_DATE,
+    endDate: offsetDateString(DEFAULT_START_DATE, 300),
   },
   mainlines: [
     { chapter: 36, date: offsetDateString(DEFAULT_START_DATE, 50), rateBonus: 2, gateLevel: null },
@@ -165,6 +202,7 @@ const state = {
     sourceLabel: FALLBACK_NIKKE_DATA ? "本地快照" : "未加载",
     chaptersVersion: FALLBACK_NIKKE_DATA?.chaptersVersion ?? "",
     outpostVersion: FALLBACK_NIKKE_DATA?.outpostVersion ?? "",
+    maxChapter: FALLBACK_NIKKE_DATA?.maxChapter ?? 0,
     normalProgressOptions: FALLBACK_NIKKE_DATA?.normalProgressOptions ?? [],
     hardProgressOptions: FALLBACK_NIKKE_DATA?.hardProgressOptions ?? [],
     outpostCoreDustMul: FALLBACK_NIKKE_DATA?.outpostCoreDustMul ?? [null],
@@ -188,6 +226,36 @@ document.body.appendChild(mainlineModalRoot);
 
 function dailyHours() {
   return FIXED_BASE_DAILY_HOURS + (FIXED_FREE_SWEEPS + state.params.paidSweeps) * FIXED_HOURS_PER_SWEEP;
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function persistParamsToStorage() {
+  const payload = {};
+  PERSISTED_PARAM_KEYS.forEach((key) => {
+    payload[key] = state.params[key] ?? "";
+  });
+  try {
+    window.localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("写入本地存储失败，已忽略。", error);
+  }
+}
+
+function loadParamsFromStorage() {
+  try {
+    const raw = window.localStorage.getItem(PARAMS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    PERSISTED_PARAM_KEYS.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(parsed, key)) state.params[key] = parsed[key];
+    });
+  } catch (error) {
+    console.warn("读取本地存储失败，已忽略。", error);
+  }
 }
 
 function parseOptionalInt(value) {
@@ -221,6 +289,7 @@ function normalizeNikkeData(chaptersPayload, outpostPayload) {
     sourceLabel: "远程实时",
     chaptersVersion: String(chaptersPayload?.version || ""),
     outpostVersion: String(outpostPayload?.version || ""),
+    maxChapter: Math.max(0, ...allStages.map((item) => chapterFromStageLabel(item.label) || 0)),
     normalProgressOptions,
     hardProgressOptions,
     outpostCoreDustMul,
@@ -233,11 +302,13 @@ function applyNikkeData(data, sourceLabel = data?.sourceLabel || "本地快照")
     sourceLabel,
     chaptersVersion: data.chaptersVersion || "",
     outpostVersion: data.outpostVersion || "",
+    maxChapter: data.maxChapter || 0,
     normalProgressOptions: data.normalProgressOptions || [],
     hardProgressOptions: data.hardProgressOptions || [],
     outpostCoreDustMul: data.outpostCoreDustMul || [null],
   };
   syncDerivedProgressData();
+  persistParamsToStorage();
 }
 
 function findLastStageIdForChapter(chapter, options) {
@@ -250,9 +321,42 @@ function findStageLabelById(options, id) {
   return (options || []).find((item) => String(item.id) === String(id))?.label || "";
 }
 
+function normalizeStageQuery(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/主线/g, "")
+    .replace(/困难/g, "")
+    .replace(/hard/g, "")
+    .replace(/boss/g, "");
+}
+
 function chapterFromStageLabel(label) {
   const match = String(label || "").match(/^(\d+)-/);
   return match ? Number(match[1]) : null;
+}
+
+function getLatestMainlineChapterOptions() {
+  const maxChapter = Number(state.nikkeData.maxChapter || 0);
+  if (!maxChapter) return [];
+  const results = [];
+  for (let chapter = 2; chapter <= maxChapter; chapter += 1) {
+    results.push({
+      id: String(chapter),
+      label: `主线${chapter}章`,
+    });
+  }
+  return results;
+}
+
+function getStageOptionsWithinLatest(options) {
+  const latestChapter = Number(state.params.latestMainlineChapter || 0);
+  if (!latestChapter) return options || [];
+  return (options || []).filter((item) => {
+    const chapter = chapterFromStageLabel(item.label);
+    return chapter != null && chapter <= latestChapter;
+  });
 }
 
 function computeOutpostLevel(normalStageId, hardStageId) {
@@ -270,16 +374,28 @@ function computeOutpostLevel(normalStageId, hardStageId) {
 }
 
 function syncDerivedProgressData() {
-  const normalOptions = state.nikkeData.normalProgressOptions || [];
-  const hardOptions = state.nikkeData.hardProgressOptions || [];
+  const normalOptions = getStageOptionsWithinLatest(state.nikkeData.normalProgressOptions || []);
+  const hardOptions = getStageOptionsWithinLatest(state.nikkeData.hardProgressOptions || []);
   if (!normalOptions.length) return;
 
-  if (!state.params.currentNormalStageId) {
-    state.params.currentNormalStageId = findLastStageIdForChapter(state.params.currentMainlineChapter, normalOptions) || normalOptions[0].id;
+  const maxChapter = Number(state.nikkeData.maxChapter || 0);
+  if (!state.params.latestMainlineChapter && maxChapter) {
+    state.params.latestMainlineChapter = String(maxChapter);
+  }
+  if (maxChapter && Number(state.params.latestMainlineChapter || 0) > maxChapter) {
+    state.params.latestMainlineChapter = String(maxChapter);
   }
 
   if (state.params.currentHardStageId && !findStageLabelById(hardOptions, state.params.currentHardStageId)) {
     state.params.currentHardStageId = "";
+  }
+
+  if (!state.params.currentNormalStageId || !findStageLabelById(normalOptions, state.params.currentNormalStageId)) {
+    state.params.currentNormalStageId = "";
+    state.params.currentBaseLevel = "";
+    state.params.startHourlyRate = "";
+    state.params.currentMainlineChapter = "";
+    return;
   }
 
   const currentChapter = chapterFromStageLabel(findStageLabelById(normalOptions, state.params.currentNormalStageId));
@@ -287,7 +403,7 @@ function syncDerivedProgressData() {
 
   const baseLevel = computeOutpostLevel(state.params.currentNormalStageId, state.params.currentHardStageId);
   state.params.currentBaseLevel = baseLevel;
-  state.params.startHourlyRate = state.nikkeData.outpostCoreDustMul[baseLevel] || state.params.startHourlyRate;
+  state.params.startHourlyRate = state.nikkeData.outpostCoreDustMul[baseLevel] || "";
 }
 
 async function loadNikkeData() {
@@ -417,7 +533,8 @@ function effectiveEvents() {
 }
 
 function getCoreDustCostForNextLevel(currentLevel) {
-  const nextLevel = currentLevel + 1;
+  const normalizedLevel = toFiniteNumber(currentLevel, 0);
+  const nextLevel = normalizedLevel + 1;
   const breakpoint = CORE_DUST_BREAKPOINTS.find((item) => item.nextLevel === nextLevel);
   if (breakpoint) return breakpoint.cost;
   const range = CORE_DUST_RANGES.find((item) => nextLevel >= item.from && nextLevel <= item.to);
@@ -425,17 +542,18 @@ function getCoreDustCostForNextLevel(currentLevel) {
 }
 
 function milestoneCount(level) {
-  if (level < FIXED_FIRST_BIG_LEVEL) return 0;
-  return Math.floor((level - FIXED_FIRST_BIG_LEVEL) / FIXED_BIG_INTERVAL) + 1;
+  const normalizedLevel = toFiniteNumber(level, 0);
+  if (normalizedLevel < FIXED_FIRST_BIG_LEVEL) return 0;
+  return Math.floor((normalizedLevel - FIXED_FIRST_BIG_LEVEL) / FIXED_BIG_INTERVAL) + 1;
 }
 
 function computeBaseHourlyRate(level, mainlineBonus) {
-  return state.params.startHourlyRate + mainlineBonus + milestoneCount(level) * state.params.bigRateBonus;
+  return toFiniteNumber(state.params.startHourlyRate, 0) + mainlineBonus + milestoneCount(level) * state.params.bigRateBonus;
 }
 
 function normalizeLevelProgress(level, progress) {
-  let currentLevel = level;
-  let currentProgress = progress;
+  let currentLevel = toFiniteNumber(level, 0);
+  let currentProgress = toFiniteNumber(progress, 0);
   while (true) {
     const cost = getCoreDustCostForNextLevel(currentLevel);
     if (cost === 0) {
@@ -706,14 +824,27 @@ function renderStatusOverview(summary = null) {
 
 function refreshParamDerivedOutputs(host = document.getElementById("params-form")) {
   if (!host) return;
+  const nextCost = state.params.startLevel === "" ? "" : String(getCoreDustCostForNextLevel(state.params.startLevel));
+  const editableValues = {
+    startDate: state.params.startDate ?? "",
+    endDate: state.params.endDate ?? "",
+    simulateDays: state.params.simulateDays ?? "",
+    paidSweeps: state.params.paidSweeps ?? "",
+    startLevel: state.params.startLevel ?? "",
+    startBoxes: state.params.startBoxes ?? "",
+  };
   const outputs = {
-    currentBaseLevel: String(state.params.currentBaseLevel),
-    startHourlyRate: state.params.startHourlyRate.toFixed(2),
-    currentMainlineChapter: String(state.params.currentMainlineChapter),
+    currentBaseLevel: state.params.currentBaseLevel === "" ? "" : String(state.params.currentBaseLevel),
+    startHourlyRate: state.params.startHourlyRate === "" ? "" : toFiniteNumber(state.params.startHourlyRate, 0).toFixed(2),
+    currentMainlineChapter: state.params.currentMainlineChapter === "" ? "" : String(state.params.currentMainlineChapter),
     nikkeDataSource: `${state.nikkeData.sourceLabel} / Chapters ${state.nikkeData.chaptersVersion || "-"} / Outpost ${state.nikkeData.outpostVersion || "-"}`,
     dailyHours: dailyHours().toFixed(1),
-    nextCost: String(getCoreDustCostForNextLevel(state.params.startLevel)),
+    nextCost,
   };
+  Object.entries(editableValues).forEach(([key, value]) => {
+    const input = host.querySelector(`[data-param-input="${key}"]`);
+    if (input && input !== document.activeElement) input.value = value;
+  });
   Object.entries(outputs).forEach(([key, value]) => {
     const input = host.querySelector(`[data-param-output="${key}"]`);
     if (input) input.value = value;
@@ -723,28 +854,47 @@ function refreshParamDerivedOutputs(host = document.getElementById("params-form"
 function renderParams() {
   const host = document.getElementById("params-form");
   host.innerHTML = "";
-  const addEditableInput = (label, key, kind) => {
+  const addGroupHeader = (title, desc = "") => {
+    const wrap = document.createElement("div");
+    wrap.className = "params-group-heading";
+    wrap.innerHTML = desc
+      ? `<div class="params-group-title">${title}</div><div class="params-group-desc">${desc}</div>`
+      : `<div class="params-group-title">${title}</div>`;
+    host.appendChild(wrap);
+  };
+
+  const addRowBreak = () => {
+    const wrap = document.createElement("div");
+    wrap.className = "params-row-break full-span";
+    host.appendChild(wrap);
+  };
+
+  const addEditableInput = (label, key, kind, options = {}) => {
     const field = document.createElement("label");
-    field.className = "field";
+    field.className = `field ${options.fullSpan ? "full-span" : ""} ${options.className || ""}`.trim();
     field.innerHTML = `<span>${label}</span>`;
     const input = document.createElement("input");
     input.type = kind === "date" ? "date" : "number";
+    input.setAttribute("data-param-input", key);
     if (kind === "float") input.step = "0.5";
     if (kind === "int") input.step = "1";
-    input.value = state.params[key];
+    input.value = state.params[key] ?? "";
     input.addEventListener("input", (event) => {
-      const raw = event.target.value || 0;
-      state.params[key] = kind === "date" ? String(raw) : kind === "int" ? Math.trunc(Number(raw || 0)) : Number(raw || 0);
+      const raw = event.target.value;
+      if (raw === "") state.params[key] = "";
+      else state.params[key] = kind === "date" ? String(raw) : kind === "int" ? Math.trunc(Number(raw)) : Number(raw);
+      if (key === "startDate" || key === "endDate" || key === "simulateDays") syncDateRange(key);
+      persistParamsToStorage();
       refreshParamDerivedOutputs(host);
-      if (key === "startDate") renderMainlineTimeline();
+      if (key === "startDate" || key === "endDate" || key === "simulateDays") renderMainlineTimeline();
     });
     field.appendChild(input);
     host.appendChild(field);
   };
 
-  const addSelectInput = (label, key, options, allowEmpty = false) => {
+  const addStageInput = (label, key, options, allowEmpty = false, config = {}) => {
     const field = document.createElement("label");
-    field.className = "field";
+    field.className = `field ${config.fullSpan ? "full-span" : ""} ${config.className || ""}`.trim();
     field.innerHTML = `<span>${label}</span>`;
     const select = document.createElement("select");
     if (allowEmpty) {
@@ -763,6 +913,10 @@ function renderParams() {
     select.addEventListener("change", (event) => {
       state.params[key] = event.target.value;
       syncDerivedProgressData();
+      persistParamsToStorage();
+      if (key === "latestMainlineChapter") {
+        renderParams();
+      }
       refreshParamDerivedOutputs(host);
       renderMainlineTimeline();
     });
@@ -770,9 +924,9 @@ function renderParams() {
     host.appendChild(field);
   };
 
-  const addReadonlyInput = (label, outputKey, value) => {
+  const addReadonlyInput = (label, outputKey, value, options = {}) => {
     const field = document.createElement("label");
-    field.className = "field";
+    field.className = `field ${options.fullSpan ? "full-span" : ""} ${options.className || ""}`.trim();
     field.innerHTML = `<span>${label}</span>`;
     const input = document.createElement("input");
     input.disabled = true;
@@ -782,27 +936,33 @@ function renderParams() {
     host.appendChild(field);
   };
 
+  addGroupHeader("当前情况", "先填写当前角色状态与主线推进进度。");
+
   addEditableInput("当前等级", "startLevel", "int");
-  addEditableInput("当前级内进度", "startProgress", "float");
   addEditableInput("拥有芯尘箱（小时）", "startBoxes", "float");
+  addReadonlyInput("升级芯尘", "nextCost", state.params.startLevel === "" ? "" : String(getCoreDustCostForNextLevel(state.params.startLevel)));
+  const latestMainlineOptions = getLatestMainlineChapterOptions();
+  if (latestMainlineOptions.length) {
+    addStageInput("当前最新主线", "latestMainlineChapter", latestMainlineOptions, false);
+  }
+  addRowBreak();
 
   if (state.nikkeData.normalProgressOptions.length) {
-    addSelectInput("当前普通主线进度", "currentNormalStageId", state.nikkeData.normalProgressOptions);
-    addSelectInput("当前困难主线进度", "currentHardStageId", state.nikkeData.hardProgressOptions, true);
-    addReadonlyInput("当前基地等级", "currentBaseLevel", String(state.params.currentBaseLevel));
-    addReadonlyInput("当前小时芯尘", "startHourlyRate", state.params.startHourlyRate.toFixed(2));
-    addReadonlyInput("当前主线章节", "currentMainlineChapter", String(state.params.currentMainlineChapter));
-    addReadonlyInput("NIKKE数据", "nikkeDataSource", `${state.nikkeData.sourceLabel} / Chapters ${state.nikkeData.chaptersVersion || "-"} / Outpost ${state.nikkeData.outpostVersion || "-"}`);
+    addStageInput("当前普通主线进度", "currentNormalStageId", getStageOptionsWithinLatest(state.nikkeData.normalProgressOptions), true);
+    addStageInput("当前困难主线进度", "currentHardStageId", getStageOptionsWithinLatest(state.nikkeData.hardProgressOptions), true);
+    addReadonlyInput("当前基地等级", "currentBaseLevel", state.params.currentBaseLevel === "" ? "" : String(state.params.currentBaseLevel));
+    addReadonlyInput("当前小时芯尘", "startHourlyRate", state.params.startHourlyRate === "" ? "" : toFiniteNumber(state.params.startHourlyRate, 0).toFixed(2));
   } else {
     addEditableInput("当前小时芯尘", "startHourlyRate", "float");
-    addEditableInput("当前主线章节", "currentMainlineChapter", "int");
   }
 
+  addGroupHeader("模拟设置", "这些设置决定模拟跨度与每日获取节奏。");
   addEditableInput("开始日期", "startDate", "date");
+  addEditableInput("结束日期", "endDate", "date");
   addEditableInput("模拟天数", "simulateDays", "int");
+  addRowBreak();
   addEditableInput("购买扫荡次数", "paidSweeps", "int");
   addReadonlyInput("自动计算的每日小时数", "dailyHours", dailyHours().toFixed(1));
-  addReadonlyInput("当前等级下一级芯尘", "nextCost", String(getCoreDustCostForNextLevel(state.params.startLevel)));
 }
 
 function renderDustReference() {
@@ -1496,8 +1656,29 @@ function renderDetailTable() {
   });
 }
 
+function getMissingSimulationMessage() {
+  if (state.params.startLevel === "") return "请先填写当前等级";
+  if (state.params.startBoxes === "") return "请先填写拥有芯尘箱";
+  if (state.nikkeData.normalProgressOptions.length && !state.params.currentNormalStageId) return "请先选择当前普通主线进度";
+  return "";
+}
+
 function runSimulation() {
   try {
+    const missingMessage = getMissingSimulationMessage();
+    if (missingMessage) {
+      state.results = {};
+      state.summaries = [];
+      fillSelect(detailStrategySelect, [], "", true);
+      renderMetrics();
+      renderCharts();
+      renderSummaryTable();
+      renderDetailTable();
+      statusText.textContent = missingMessage;
+      renderStatusOverview();
+      return;
+    }
+
     const enabledStrategies = state.strategies.filter((strategy) => strategy.enabled);
     if (!enabledStrategies.length) {
       state.results = {};
@@ -1682,6 +1863,7 @@ function bindEvents() {
 }
 
 async function initializeApp() {
+  loadParamsFromStorage();
   buildPageNav();
   bindCollapsible();
   bindEvents();

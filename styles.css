@@ -530,6 +530,45 @@ select {
   gap: 14px;
 }
 
+.params-group-heading,
+.form-grid > .full-span {
+  grid-column: 1 / -1;
+}
+
+.params-row-break {
+  height: 0;
+  min-height: 0;
+  margin: -6px 0 0;
+  padding: 0;
+}
+
+.params-group-heading {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(214, 224, 238, 0.95);
+}
+
+.params-group-heading:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.params-group-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #2b3b52;
+}
+
+.params-group-desc {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -1042,6 +1081,7 @@ tbody tr:hover {
   .editor-grid.strategies-grid {
     grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(220px, 1.5fr) 38px;
   }
+
 }
 
 @media (max-width: 720px) {
