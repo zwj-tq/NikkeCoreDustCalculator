@@ -20,6 +20,13 @@ const STRATEGY_TYPES = [
   "SMART_VALUE_GATE",
 ];
 
+const FIXED_TARGET_102_RATE = 102;
+const FIXED_BASE_DAILY_HOURS = 24;
+const FIXED_FREE_SWEEPS = 1;
+const FIXED_HOURS_PER_SWEEP = 2;
+const FIXED_FIRST_BIG_LEVEL = 381;
+const FIXED_BIG_INTERVAL = 20;
+
 const CORE_DUST_BREAKPOINTS = [
   { nextLevel: 11, cost: 20 },
   { nextLevel: 21, cost: 40 },
@@ -55,15 +62,10 @@ const state = {
     startProgress: 0,
     startHourlyRate: 79,
     startBoxes: 1800,
-    target102Rate: 102,
     simulateDays: 300,
-    monthDays: 30,
-    baseDailyHours: 24,
-    freeSweeps: 1,
     paidSweeps: 2,
-    firstBigLevel: 381,
-    bigInterval: 20,
     bigRateBonus: 1.5,
+    startDate: new Date().toISOString().slice(0, 10),
   },
   mainlines: [
     { index: 1, day: 50, rateBonus: 2, gateLevel: null, enabled: true, note: "" },
@@ -101,7 +103,7 @@ const detailStrategySelect = document.getElementById("detail-strategy-select");
 const pageNavList = document.getElementById("page-nav-list");
 
 function dailyHours() {
-  return state.params.baseDailyHours + (state.params.freeSweeps + state.params.paidSweeps) * 2;
+  return FIXED_BASE_DAILY_HOURS + (FIXED_FREE_SWEEPS + state.params.paidSweeps) * FIXED_HOURS_PER_SWEEP;
 }
 
 function parseOptionalInt(value) {
@@ -135,13 +137,29 @@ function getCoreDustCostForNextLevel(currentLevel) {
 }
 
 function milestoneCount(level) {
-  if (level < state.params.firstBigLevel) return 0;
-  return Math.floor((level - state.params.firstBigLevel) / state.params.bigInterval) + 1;
+  if (level < FIXED_FIRST_BIG_LEVEL) return 0;
+  return Math.floor((level - FIXED_FIRST_BIG_LEVEL) / FIXED_BIG_INTERVAL) + 1;
 }
 
 function computeBaseHourlyRate(level, mainlineBonus, unlocked102) {
   const baseRate = state.params.startHourlyRate + mainlineBonus + milestoneCount(level) * state.params.bigRateBonus;
-  return unlocked102 ? Math.max(baseRate, state.params.target102Rate) : baseRate;
+  return unlocked102 ? Math.max(baseRate, FIXED_TARGET_102_RATE) : baseRate;
+}
+
+function dayToDate(day) {
+  const base = new Date(`${state.params.startDate}T00:00:00`);
+  base.setDate(base.getDate() + day);
+  return base;
+}
+
+function addMonthsClamped(date, months) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  const targetMonth = month + months;
+  const first = new Date(year, targetMonth, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(day, lastDay));
 }
 
 function isExtraTriggered(extra, day) {
@@ -150,7 +168,22 @@ function isExtraTriggered(extra, day) {
   if (frequency !== "一次性" && day > extra.endDay) return false;
   if (frequency === "每日") return true;
   if (frequency === "每周") return (day - extra.startDay) % 7 === 0;
-  if (frequency === "每月") return (day - extra.startDay) % state.params.monthDays === 0;
+  if (frequency === "每月") {
+    const current = dayToDate(day);
+    const anchor = dayToDate(extra.startDay);
+    let cursor = new Date(anchor);
+    while (cursor <= current) {
+      if (
+        cursor.getFullYear() === current.getFullYear() &&
+        cursor.getMonth() === current.getMonth() &&
+        cursor.getDate() === current.getDate()
+      ) {
+        return true;
+      }
+      cursor = addMonthsClamped(anchor, (cursor.getFullYear() - anchor.getFullYear()) * 12 + cursor.getMonth() - anchor.getMonth() + 1);
+    }
+    return false;
+  }
   if (frequency === "一次性") return day === extra.startDay;
   return false;
 }
@@ -200,8 +233,8 @@ function boxesNeededForTargetLevel(targetLevel, currentLevel, currentProgress, b
 }
 
 function nextMilestoneLevel(level) {
-  if (level < state.params.firstBigLevel) return state.params.firstBigLevel;
-  return state.params.firstBigLevel + (Math.floor((level - state.params.firstBigLevel) / state.params.bigInterval) + 1) * state.params.bigInterval;
+  if (level < FIXED_FIRST_BIG_LEVEL) return FIXED_FIRST_BIG_LEVEL;
+  return FIXED_FIRST_BIG_LEVEL + (Math.floor((level - FIXED_FIRST_BIG_LEVEL) / FIXED_BIG_INTERVAL) + 1) * FIXED_BIG_INTERVAL;
 }
 
 function findActiveGateLevel(mainlinesSeen) {
@@ -217,8 +250,8 @@ function shouldOpenFor102ByValue(currentDay, currentHourlyRate, boxesNeeded, cur
   if (boxesNeeded <= 0) return { shouldOpen: true, note: "无需开箱即可达到门槛" };
   const nextGateDay = futureGateDays.find((day) => day > currentDay) ?? state.params.simulateDays;
   const advanceDays = Math.max(0, nextGateDay - currentDay);
-  const gain = advanceDays * dailyHours() * Math.max(0, state.params.target102Rate - currentHourlyRate);
-  const costPerBox = Math.max(0, state.params.target102Rate - currentHourlyRate);
+  const gain = advanceDays * dailyHours() * Math.max(0, FIXED_TARGET_102_RATE - currentHourlyRate);
+  const costPerBox = Math.max(0, FIXED_TARGET_102_RATE - currentHourlyRate);
   const cost = boxesNeeded * costPerBox;
   return {
     shouldOpen: gain > cost,
@@ -402,27 +435,27 @@ function renderParams() {
   const host = document.getElementById("params-form");
   host.innerHTML = "";
   const fields = [
-    ["初始等级", "startLevel"],
-    ["当前级内进度", "startProgress"],
-    ["当前小时芯尘", "startHourlyRate"],
-    ["初始芯尘箱", "startBoxes"],
-    ["102目标小时量", "target102Rate"],
-    ["模拟天数", "simulateDays"],
-    ["每月周期天数", "monthDays"],
-    ["基础日常小时", "baseDailyHours"],
-    ["免费扫荡次数", "freeSweeps"],
-    ["购买扫荡次数", "paidSweeps"],
+    ["初始等级", "startLevel", "int"],
+    ["当前级内进度", "startProgress", "float"],
+    ["当前小时芯尘", "startHourlyRate", "float"],
+    ["拥有芯尘箱（小时）", "startBoxes", "float"],
+    ["开始日期", "startDate", "date"],
+    ["模拟天数", "simulateDays", "int"],
+    ["购买扫荡次数", "paidSweeps", "int"],
   ];
 
-  fields.forEach(([label, key]) => {
+  fields.forEach(([label, key, kind]) => {
     const field = document.createElement("label");
     field.className = "field";
     field.innerHTML = `<span>${label}</span>`;
     const input = document.createElement("input");
-    input.type = "number";
+    input.type = kind === "date" ? "date" : "number";
+    if (kind === "float") input.step = "0.1";
+    if (kind === "int") input.step = "1";
     input.value = state.params[key];
     input.addEventListener("input", (event) => {
-      state.params[key] = Number(event.target.value || 0);
+      const raw = event.target.value || 0;
+      state.params[key] = kind === "date" ? String(raw) : kind === "int" ? Math.trunc(Number(raw || 0)) : Number(raw || 0);
       renderParams();
       renderMetrics();
       renderDustReference();
@@ -433,8 +466,6 @@ function renderParams() {
 
   [
     ["自动计算的每日小时数", dailyHours().toFixed(1)],
-    ["首个大档等级", state.params.firstBigLevel],
-    ["大档间隔", state.params.bigInterval],
     ["当前等级下一级芯尘", getCoreDustCostForNextLevel(state.params.startLevel)],
   ].forEach(([label, value]) => {
     const field = document.createElement("label");

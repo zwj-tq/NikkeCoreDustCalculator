@@ -10,6 +10,7 @@
   --danger: #d84b4b;
   --shadow: 0 16px 50px rgba(15, 23, 42, 0.08);
   --radius: 22px;
+  --table-sticky-top: 112px;
 }
 
 * {
@@ -37,6 +38,7 @@ select {
   width: min(1200px, calc(100vw - 32px));
   margin: 0 auto;
   padding: 24px 0 56px;
+  position: relative;
 }
 
 .layout-shell {
@@ -134,7 +136,7 @@ select {
 .page-nav {
   position: fixed;
   top: 50%;
-  right: max(16px, calc((100vw - 1200px) / 2 - 108px));
+  left: calc(50% + min(1200px, calc(100vw - 32px)) / 2 + 24px);
   transform: translateY(-50%);
   z-index: 40;
   padding: 10px 8px;
@@ -559,6 +561,7 @@ select {
 }
 
 .table-wrap {
+  position: relative;
   overflow-x: auto;
 }
 
@@ -581,6 +584,24 @@ th {
   font-size: 13px;
 }
 
+.sticky-head-wrap thead th,
+.detail-wrap thead th {
+  position: sticky;
+  background: rgba(248, 251, 255, 0.96);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+.sticky-head-wrap thead th {
+  top: var(--table-sticky-top);
+  z-index: 3;
+}
+
+.detail-wrap thead th {
+  top: 0;
+  z-index: 2;
+}
+
 tbody tr:hover {
   background: #f9fbff;
 }
@@ -596,6 +617,9 @@ tbody tr:hover {
 .detail-wrap {
   max-height: 720px;
   overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fcfdff;
 }
 
 @media (max-width: 1080px) {
@@ -619,12 +643,11 @@ tbody tr:hover {
   }
 
   .page-nav {
-    right: 12px;
+    display: none;
   }
 
-  .page-nav-list {
-    flex-direction: row;
-    flex-wrap: wrap;
+  :root {
+    --table-sticky-top: 108px;
   }
 }
 
@@ -663,5 +686,9 @@ tbody tr:hover {
 
   .page-nav {
     display: none;
+  }
+
+  :root {
+    --table-sticky-top: 96px;
   }
 }
