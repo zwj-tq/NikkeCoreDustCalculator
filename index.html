@@ -28,33 +28,8 @@
 
     <div class="sticky-toolbar-shell">
       <section class="sticky-toolbar">
-        <div class="toolbar-actions">
-          <button id="run-btn" class="primary-btn" type="button">重新计算</button>
-          <button id="export-csv-btn" class="ghost-btn" type="button">导出当前明细 CSV</button>
-          <button id="export-png-btn" class="ghost-btn" type="button">导出图表 PNG</button>
-        </div>
-        <div class="toolbar-status">
-          <div class="status-pill compact">
-            <span class="status-label">状态</span>
-            <strong id="status-text">等待计算</strong>
-          </div>
-          <div class="status-pill compact">
-            <span class="status-label">当前最佳策略</span>
-            <strong id="best-strategy-text">--</strong>
-          </div>
-          <div class="status-pill compact">
-            <span class="status-label">当前最高等级</span>
-            <strong id="current-level-text">--</strong>
-          </div>
-          <div class="status-pill compact">
-            <span class="status-label">最终等级</span>
-            <strong id="final-level-text">--</strong>
-          </div>
-          <div class="status-pill compact">
-            <span class="status-label">策略数</span>
-            <strong id="strategy-count-text">--</strong>
-          </div>
-        </div>
+        <div class="toolbar-actions" id="toolbar-actions"></div>
+        <div class="toolbar-status" id="toolbar-status"></div>
       </section>
     </div>
 
@@ -152,7 +127,7 @@
                     <th>累计开箱</th>
                   </tr>
                 </thead>
-                <tbody id="summary-body-old"></tbody>
+                <tbody></tbody>
               </table>
             </div>
           </div>
@@ -182,6 +157,7 @@
               <tbody id="summary-body"></tbody>
             </table>
           </div>
+          <div id="summary-mobile-cards" class="summary-mobile-list" hidden></div>
         </div>
       </section>
 
@@ -219,6 +195,12 @@
               <tbody id="detail-body"></tbody>
             </table>
           </div>
+          <div class="detail-mobile-shell" id="detail-mobile-shell" hidden>
+            <div class="detail-mobile-actions">
+              <button id="detail-view-toggle" class="ghost-btn" type="button">查看完整表格</button>
+            </div>
+            <div id="detail-mobile-cards" class="detail-mobile-list"></div>
+          </div>
         </div>
       </section>
 
@@ -251,7 +233,7 @@
                     <th>累计开箱</th>
                   </tr>
                 </thead>
-                <tbody id="summary-body-old"></tbody>
+                <tbody></tbody>
               </table>
             </div>
           </div>
@@ -294,6 +276,6 @@
   </div>
 
   <script src="./nikke-data.js"></script>
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

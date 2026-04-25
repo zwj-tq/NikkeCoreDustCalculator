@@ -1,3 +1,28 @@
+import {
+  buildCollectionCardHeader,
+  buildCompactStatusItems,
+  clampFloatingDialogPosition,
+  buildDetailTableCells,
+  buildMainlineScatterData,
+  getEffectiveViewportWidth,
+  buildMobileDetailCards,
+  buildMobileCollectionCardFields,
+  buildMobileSummaryCards,
+  buildSummaryTableCells,
+  buildToolbarActionGroups,
+  getDetailViewRenderMode,
+  getDetailViewToggleLabel,
+  getInitialSectionOpenState,
+  getLayoutDensityTokens,
+  getResponsiveSectionOpenState,
+  getMainlineTimelinePresentation,
+  hasLayoutModeChanged,
+  ensureStrategyIds,
+  getLayoutMode,
+  getSummaryRenderMode,
+  getStrategySelectionKey,
+} from "./ui/layout.js";
+
 const CHART_COLORS = [
   "#D35D3D",
   "#2F6FED",
@@ -20,6 +45,38 @@ const STRATEGY_TYPES = [
   "SMART_VALUE_GATE",
 ];
 
+const EVENT_EDITOR_SCHEMA = [
+  { key: "name", label: "名称", type: "text", columnClass: "col-name" },
+  { key: "startDate", label: "开始日期", type: "date", columnClass: "col-date" },
+  { key: "durationDays", label: "持续天数", type: "number", cast: "number", columnClass: "col-day" },
+  { key: "boxes", label: "获得箱子", type: "number", cast: "number", step: "1", columnClass: "col-amount" },
+];
+
+const EXTRA_EDITOR_SCHEMA = [
+  { key: "name", label: "名称", type: "text", columnClass: "col-name" },
+  { key: "startDate", label: "开始日期", type: "date", columnClass: "col-date" },
+  { key: "frequency", label: "类型", type: "select", options: EXTRA_FREQUENCIES, columnClass: "col-frequency" },
+  { key: "amount", label: "芯尘箱", type: "number", cast: "number", step: "0.1", columnClass: "col-amount" },
+  { key: "note", label: "备注", type: "text", columnClass: "col-note" },
+];
+
+const DESKTOP_STRATEGY_EDITOR_SCHEMA = [
+  { key: "name", label: "名称", type: "text", hideLabel: true },
+  { key: "type", label: "类型", type: "select", options: STRATEGY_TYPES, hideLabel: true },
+  { key: "targetDay", label: "目标天", type: "text", cast: "optionalInt", hideLabel: true },
+  { key: "targetLevel", label: "目标级", type: "text", cast: "optionalInt", hideLabel: true },
+  { key: "note", label: "备注", type: "text", hideLabel: true },
+];
+
+const MOBILE_STRATEGY_EDITOR_SCHEMA = [
+  { key: "name", label: "名称", type: "text", columnClass: "col-name" },
+  { key: "type", label: "类型", type: "select", options: STRATEGY_TYPES, columnClass: "col-frequency" },
+  { key: "targetDay", label: "目标天", type: "text", cast: "optionalInt", columnClass: "col-day" },
+  { key: "targetLevel", label: "目标级", type: "text", cast: "optionalInt", columnClass: "col-amount" },
+  { key: "note", label: "备注", type: "text", columnClass: "col-note" },
+  { key: "enabled", label: "启用", type: "checkbox", columnClass: "col-toggle" },
+];
+
 const ACTIVITY_MODES = {
   DAILY: "daily",
   WEEKLY: "weekly",
@@ -39,6 +96,7 @@ const FIXED_BIG_INTERVAL = 20;
 const DEFAULT_START_DATE = new Date().toISOString().slice(0, 10);
 const NIKKE_REMOTE_BASE = "https://nikkeoutpost.netlify.app";
 const FALLBACK_NIKKE_DATA = window.NIKKE_DATA_SNAPSHOT || null;
+const echarts = window.echarts;
 const PARAMS_STORAGE_KEY = "nikke_calc_params";
 const PERSISTED_PARAM_KEYS = [
   "startLevel",
@@ -50,6 +108,12 @@ const PERSISTED_PARAM_KEYS = [
   "paidSweeps",
   "startDate",
   "endDate",
+];
+
+const TOOLBAR_ACTIONS = [
+  { id: "run-btn", label: "重新计算", className: "primary-btn", priority: "primary" },
+  { id: "export-csv-btn", label: "导出当前明细 CSV", className: "ghost-btn", priority: "secondary" },
+  { id: "export-png-btn", label: "导出图表 PNG", className: "ghost-btn", priority: "secondary" },
 ];
 
 const CORE_DUST_BREAKPOINTS = [
@@ -184,17 +248,18 @@ const state = {
     { name: "每周补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每周", amount: 0, enabled: true, note: "" },
     { name: "每月补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每月", amount: 0, enabled: true, note: "" },
   ],
-  strategies: [
+  strategies: ensureStrategyIds([
     { name: "完全囤箱", type: "BASELINE", targetDay: null, targetLevel: null, enabled: true, note: "全程不开箱，只靠自然获取推进，适合作为最保守基线。" },
     { name: "立刻全开", type: "OPEN_ALL_NOW", targetDay: 0, targetLevel: null, enabled: true, note: "开局第一天把现有箱子全部打开，用来观察短期爆发收益。" },
     { name: "最后一天全开", type: "NO_BOX", targetDay: null, targetLevel: null, enabled: true, note: "全程囤箱到模拟最后一天再统一开箱，适合观察极限囤箱收益。" },
     { name: "门槛即开", type: "SMART_GATE", targetDay: null, targetLevel: null, enabled: true, note: "每次遇到主线门槛时，只开到当前门槛需要的量，不额外超开。" },
     { name: "大关卡分段开", type: "OPEN_EVERY_MILESTONE", targetDay: null, targetLevel: null, enabled: true, note: "遇到大关卡节点再分段释放箱子，兼顾推进与资源留存。" },
     { name: "价值判断开箱", type: "SMART_VALUE_GATE", targetDay: null, targetLevel: null, enabled: true, note: "在门槛节点按额外收益与开箱成本做启发式判断，划算时才开箱。" },
-  ],
+  ]),
   results: {},
   summaries: [],
   detailStrategy: "",
+  mobileDetailView: "cards",
   mainlineEditorIndex: 0,
   mainlineModalOpen: false,
   mainlinePopupPosition: { x: 0, y: 0 },
@@ -212,17 +277,62 @@ const state = {
 const mainlineTimelineChart = echarts.init(document.getElementById("mainline-timeline-chart"));
 const lineChart = echarts.init(document.getElementById("line-chart"));
 const barChart = echarts.init(document.getElementById("bar-chart"));
-const statusText = document.getElementById("status-text");
-const bestStrategyText = document.getElementById("best-strategy-text");
-const currentLevelText = document.getElementById("current-level-text");
-const finalLevelText = document.getElementById("final-level-text");
-const strategyCountText = document.getElementById("strategy-count-text");
+const toolbarActionsHost = document.getElementById("toolbar-actions");
+const toolbarStatusHost = document.getElementById("toolbar-status");
 const detailStrategySelect = document.getElementById("detail-strategy-select");
+const detailViewToggle = document.getElementById("detail-view-toggle");
+const summaryTableWrap = document.querySelector("#section-summary .table-wrap");
+const summaryBody = document.getElementById("summary-body");
+const summaryMobileCardsHost = document.getElementById("summary-mobile-cards");
+const detailBody = document.getElementById("detail-body");
+const detailWrap = document.querySelector(".detail-wrap");
+const detailMobileShell = document.getElementById("detail-mobile-shell");
+const detailMobileCardsHost = document.getElementById("detail-mobile-cards");
 const pageNavList = document.getElementById("page-nav-list");
 const mainlineEditorHost = document.getElementById("mainline-editor");
 const mainlineModalRoot = document.createElement("div");
 mainlineModalRoot.className = "mainline-modal";
 document.body.appendChild(mainlineModalRoot);
+
+const toolbarStatusState = {
+  statusText: "等待计算",
+  bestStrategyText: "--",
+  currentLevelText: "--",
+  finalLevelText: "--",
+  strategyCountText: "--",
+};
+
+const sectionOpenOverrides = {};
+
+let currentLayoutMode = getCurrentLayoutMode();
+
+function getCurrentViewportWidth() {
+  return getEffectiveViewportWidth({
+    visualViewportWidth: window.visualViewport?.width,
+    clientWidth: document.documentElement.clientWidth,
+    innerWidth: window.innerWidth,
+  });
+}
+
+function getCurrentLayoutMode() {
+  return getLayoutMode(getCurrentViewportWidth());
+}
+
+function getCurrentViewportHeight() {
+  return getEffectiveViewportWidth({
+    visualViewportWidth: window.visualViewport?.height,
+    clientWidth: document.documentElement.clientHeight,
+    innerWidth: window.innerHeight,
+  });
+}
+
+function applyLayoutDensity(layoutMode) {
+  const tokens = getLayoutDensityTokens(layoutMode, getCurrentViewportWidth());
+  Object.entries(tokens).forEach(([token, value]) => {
+    document.documentElement.style.setProperty(`--${token}`, value);
+  });
+  document.body.dataset.layoutMode = layoutMode;
+}
 
 function dailyHours() {
   return FIXED_BASE_DAILY_HOURS + (FIXED_FREE_SWEEPS + state.params.paidSweeps) * FIXED_HOURS_PER_SWEEP;
@@ -794,11 +904,12 @@ function simulate(strategy) {
 
 function buildSummaries() {
   return Object.entries(state.results)
-    .map(([name, rows]) => {
-      const strategy = state.strategies.find((item) => item.name === name);
+    .map(([selectionKey, rows]) => {
+      const strategy = state.strategies.find((item) => getStrategySelectionKey(item) === selectionKey);
       const last = rows[rows.length - 1];
       return {
-        name,
+        selectionKey,
+        name: strategy?.name ?? selectionKey,
         strategyType: strategy?.type ?? "",
         finalDisplayLevel: last.displayLevel,
         finalBoxes: last.boxes,
@@ -815,11 +926,103 @@ function getCurrentDisplayLevel() {
   return nextCost > 0 ? normalized.level + normalized.progress / nextCost : normalized.level;
 }
 
+function createToolbarButton(action) {
+  const button = document.createElement("button");
+  button.id = action.id;
+  button.type = "button";
+  button.className = action.className;
+  button.textContent = action.label;
+  return button;
+}
+
+function createStatusPill(item, className = "status-pill compact") {
+  const pill = document.createElement("div");
+  pill.className = className;
+  pill.dataset.statusKey = item.key;
+
+  const label = document.createElement("span");
+  label.className = "status-label";
+  label.textContent = item.label;
+  pill.appendChild(label);
+
+  const value = document.createElement("strong");
+  value.textContent = item.value;
+  pill.appendChild(value);
+
+  return pill;
+}
+
+function renderToolbar() {
+  if (!toolbarActionsHost) return;
+
+  toolbarActionsHost.innerHTML = "";
+  const layoutMode = getCurrentLayoutMode();
+  const groups = buildToolbarActionGroups(TOOLBAR_ACTIONS, layoutMode);
+
+  const primaryWrap = document.createElement("div");
+  primaryWrap.className = "toolbar-primary-actions";
+  groups.primary.forEach((action) => {
+    primaryWrap.appendChild(createToolbarButton(action));
+  });
+  toolbarActionsHost.appendChild(primaryWrap);
+
+  if (!groups.secondary.length) {
+    return;
+  }
+
+  const secondaryMenu = document.createElement("details");
+  secondaryMenu.className = "toolbar-secondary-menu";
+
+  const summary = document.createElement("summary");
+  summary.className = "toolbar-secondary-toggle";
+  summary.textContent = "导出与更多";
+  secondaryMenu.appendChild(summary);
+
+  const secondaryActions = document.createElement("div");
+  secondaryActions.className = "toolbar-secondary-actions";
+  groups.secondary.forEach((action) => {
+    secondaryActions.appendChild(createToolbarButton(action));
+  });
+  secondaryMenu.appendChild(secondaryActions);
+
+  toolbarActionsHost.appendChild(secondaryMenu);
+}
+
+function renderCompactStatus() {
+  if (!toolbarStatusHost) return;
+
+  toolbarStatusHost.innerHTML = "";
+  const layoutMode = getCurrentLayoutMode();
+
+  if (layoutMode === "mobile") {
+    const statusLine = document.createElement("div");
+    statusLine.className = "toolbar-status-note";
+    statusLine.textContent = toolbarStatusState.statusText;
+    toolbarStatusHost.appendChild(statusLine);
+
+    buildCompactStatusItems(toolbarStatusState).forEach((item) => {
+      toolbarStatusHost.appendChild(createStatusPill(item));
+    });
+    return;
+  }
+
+  [
+    { key: "status", label: "状态", value: toolbarStatusState.statusText },
+    { key: "bestStrategy", label: "当前最佳策略", value: toolbarStatusState.bestStrategyText },
+    { key: "currentLevel", label: "当前最高等级", value: toolbarStatusState.currentLevelText },
+    { key: "finalLevel", label: "最终等级", value: toolbarStatusState.finalLevelText },
+    { key: "strategyCount", label: "策略数", value: toolbarStatusState.strategyCountText },
+  ].forEach((item) => {
+    toolbarStatusHost.appendChild(createStatusPill(item));
+  });
+}
+
 function renderStatusOverview(summary = null) {
-  bestStrategyText.textContent = summary?.name ?? "--";
-  currentLevelText.textContent = summary ? getCurrentDisplayLevel().toFixed(2) : "--";
-  finalLevelText.textContent = summary ? summary.finalDisplayLevel.toFixed(2) : "--";
-  strategyCountText.textContent = summary ? String(state.summaries.length) : "--";
+  toolbarStatusState.bestStrategyText = summary?.name ?? "--";
+  toolbarStatusState.currentLevelText = summary ? getCurrentDisplayLevel().toFixed(2) : "--";
+  toolbarStatusState.finalLevelText = summary ? summary.finalDisplayLevel.toFixed(2) : "--";
+  toolbarStatusState.strategyCountText = summary ? String(state.summaries.length) : "--";
+  renderCompactStatus();
 }
 
 function refreshParamDerivedOutputs(host = document.getElementById("params-form")) {
@@ -1079,6 +1282,7 @@ function renderListHeader(host, className, labels, includeAction = true) {
 function renderGenericRows(listId, rows, schema, onDelete, options = {}) {
   const host = document.getElementById(listId);
   host.innerHTML = "";
+  host.classList.remove("mobile-editor-list");
   if (options.showHeader !== false) {
     renderListHeader(host, `editor-grid ${options.gridClass || ""}`.trim(), schema.map((field) => ({ label: field.label, columnClass: field.columnClass })));
   }
@@ -1099,6 +1303,155 @@ function renderGenericRows(listId, rows, schema, onDelete, options = {}) {
       grid.appendChild(del);
     }
     card.appendChild(grid);
+    host.appendChild(card);
+  });
+}
+
+function isMobileLayout() {
+  return getCurrentLayoutMode() === "mobile";
+}
+
+function getCollectionCardSchema(kind) {
+  if (kind === "events") return EVENT_EDITOR_SCHEMA;
+  if (kind === "extras") return EXTRA_EDITOR_SCHEMA;
+  if (kind === "strategies") return MOBILE_STRATEGY_EDITOR_SCHEMA;
+  return [];
+}
+
+function createExtraRangeFields(row, onHeaderUpdate) {
+  const wrap = document.createElement("div");
+  wrap.className = "mobile-range-fields";
+
+  wrap.appendChild(createField("开始日期", row.startDate, (value) => {
+    row.startDate = value;
+    onHeaderUpdate();
+  }, {
+    type: "date",
+    columnClass: "col-date",
+  }));
+
+  wrap.appendChild(createField("开始天", row.startDay, (value) => {
+    row.startDay = Number(value || 0);
+    onHeaderUpdate();
+  }, {
+    type: "number",
+    cast: "number",
+    columnClass: "col-day",
+  }));
+
+  wrap.appendChild(createField("结束天", row.endDay, (value) => {
+    row.endDay = Number(value || 0);
+    onHeaderUpdate();
+  }, {
+    type: "number",
+    cast: "number",
+    columnClass: "col-day",
+  }));
+
+  return wrap;
+}
+
+function renderCollectionCards(listId, kind, rows, onDelete) {
+  const host = document.getElementById(listId);
+  const schema = getCollectionCardSchema(kind);
+  host.innerHTML = "";
+  host.classList.add("mobile-editor-list");
+
+  rows.forEach((row, index) => {
+    const card = document.createElement("div");
+    card.className = `editor-row mobile-editor-card mobile-editor-card-${kind}`;
+
+    const header = document.createElement("div");
+    header.className = "mobile-editor-card-header";
+
+    const titleGroup = document.createElement("div");
+    titleGroup.className = "mobile-editor-card-copy";
+
+    const title = document.createElement("div");
+    title.className = "mobile-editor-card-title";
+    titleGroup.appendChild(title);
+
+    const metaRow = document.createElement("div");
+    metaRow.className = "mobile-editor-card-meta";
+
+    const subtitle = document.createElement("div");
+    subtitle.className = "mobile-editor-card-subtitle";
+    metaRow.appendChild(subtitle);
+
+    const status = document.createElement(kind === "strategies" ? "button" : "div");
+    status.className = "mobile-editor-card-status";
+    if (kind === "strategies") status.type = "button";
+    status.hidden = true;
+    metaRow.appendChild(status);
+
+    titleGroup.appendChild(metaRow);
+    header.appendChild(titleGroup);
+
+    if (!row.locked) {
+      const del = document.createElement("button");
+      del.className = "icon-btn";
+      del.type = "button";
+      del.textContent = "x";
+      del.addEventListener("click", () => onDelete(index));
+      header.appendChild(del);
+    }
+
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "mobile-editor-card-fields";
+
+    const syncHeader = () => {
+      const headerContent = buildCollectionCardHeader(kind, row);
+      title.textContent = headerContent.title || `${kind}-${index + 1}`;
+      subtitle.textContent = headerContent.subtitle || "";
+      subtitle.hidden = !headerContent.subtitle;
+      status.textContent = headerContent.statusText || "";
+      status.hidden = !headerContent.statusText;
+      status.classList.toggle("is-actionable", kind === "strategies");
+      if (kind === "strategies") {
+        status.dataset.enabled = row.enabled ? "true" : "false";
+        status.setAttribute("aria-pressed", row.enabled ? "true" : "false");
+        status.title = row.enabled ? "点击停用策略" : "点击启用策略";
+      } else {
+        delete status.dataset.enabled;
+        status.removeAttribute("aria-pressed");
+        status.removeAttribute("title");
+      }
+    };
+
+    syncHeader();
+
+    if (kind === "strategies") {
+      status.addEventListener("click", () => {
+        row.enabled = !row.enabled;
+        syncHeader();
+      });
+    }
+
+    buildMobileCollectionCardFields(kind, row).forEach((descriptor) => {
+      if (kind === "extras" && descriptor.key === "range") {
+        body.appendChild(createExtraRangeFields(row, syncHeader));
+        return;
+      }
+
+      const field = schema.find((item) => item.key === descriptor.key);
+      if (!field) return;
+      body.appendChild(createField(
+        descriptor.label,
+        row[field.key],
+        (value) => {
+          row[field.key] = value;
+          syncHeader();
+        },
+        {
+          ...field,
+          hideLabel: false,
+        },
+      ));
+    });
+
+    card.appendChild(body);
     host.appendChild(card);
   });
 }
@@ -1140,12 +1493,22 @@ function closeMainlineModal() {
 }
 
 function setMainlinePopupPosition(x, y) {
-  const width = 420;
-  const height = 320;
-  state.mainlinePopupPosition = {
-    x: Math.min(Math.max(window.scrollX + 12, x), window.scrollX + window.innerWidth - width - 12),
-    y: Math.min(Math.max(window.scrollY + 12, y), window.scrollY + window.innerHeight - height - 12),
-  };
+  const viewportWidth = getCurrentViewportWidth();
+  const viewportHeight = getCurrentViewportHeight();
+  const dialogWidth = Math.max(Math.min(420, viewportWidth - 24), 0);
+  const dialogHeight = currentLayoutMode === "mobile" ? Math.max(viewportHeight - 24, 0) : 320;
+
+  state.mainlinePopupPosition = clampFloatingDialogPosition({
+    anchorX: x,
+    anchorY: y,
+    scrollX: window.scrollX,
+    scrollY: window.scrollY,
+    viewportWidth,
+    viewportHeight,
+    dialogWidth,
+    dialogHeight,
+    inset: 12,
+  });
 }
 
 function renderMainlineModal() {
@@ -1158,10 +1521,13 @@ function renderMainlineModal() {
   const current = state.mainlines[state.mainlineEditorIndex];
   const { x, y } = state.mainlinePopupPosition;
   const currentLabel = formatMainlineLabel(current.chapter ?? mainlineChapterForIndex(state.mainlineEditorIndex));
+  const isMobileMainlineModal = currentLayoutMode === "mobile";
+  const dialogClassName = `mainline-modal-dialog${isMobileMainlineModal ? " is-mobile" : ""}`;
+  const dialogPositionStyle = isMobileMainlineModal ? "" : ` style="left:${x}px;top:${y}px;"`;
 
   mainlineModalRoot.classList.add("is-open");
   mainlineModalRoot.innerHTML = `
-    <div class="mainline-modal-dialog" role="dialog" aria-modal="false" aria-label="编辑主线节点" style="left:${x}px;top:${y}px;">
+    <div class="${dialogClassName}" role="dialog" aria-modal="false" aria-label="编辑主线节点"${dialogPositionStyle}>
       <div class="mainline-modal-head">
         <div>
           <div class="mainline-modal-title">编辑主线节点</div>
@@ -1223,6 +1589,7 @@ function renderMainlineModal() {
 function renderMainlineTimeline() {
   ensureMainlineEditorIndex();
   const entries = sortedMainlineEntries();
+  const timelinePresentation = getMainlineTimelinePresentation(currentLayoutMode);
 
   if (!entries.length) {
     mainlineTimelineChart.setOption({
@@ -1249,25 +1616,7 @@ function renderMainlineTimeline() {
   const padding = Math.max(86400000 * 10, Math.floor((lastTs - firstTs || 86400000) * 0.08));
 
   const lineData = entries.map((item) => [item.timestamp, 0]);
-  const scatterData = entries.map((item) => ({
-    value: [item.timestamp, 0],
-    originalIndex: item.index,
-    symbolSize: 0,
-    itemStyle: {
-      color: "rgba(0,0,0,0)",
-    },
-    label: {
-      show: true,
-      position: "top",
-      distance: 18,
-      formatter: `${item.label}\n${item.date}`,
-      color: "#1f2937",
-      fontSize: 12,
-      lineHeight: 18,
-      align: "center",
-      fontWeight: item.index === state.mainlineEditorIndex ? 700 : 500,
-    },
-  }));
+  const scatterData = buildMainlineScatterData(entries, state.mainlineEditorIndex, currentLayoutMode);
 
   mainlineTimelineChart.setOption({
     animation: true,
@@ -1275,11 +1624,11 @@ function renderMainlineTimeline() {
       text: `主线更新时间线（起始日 ${state.params.startDate}）`,
       subtext: "双击空白处新增节点，单击节点编辑，拖动节点修改日期",
       left: "center",
-      top: 8,
-      textStyle: { fontSize: 18, fontWeight: 700, color: "#1f2937" },
-      subtextStyle: { fontSize: 12, color: "#7a879b", padding: [8, 0, 0, 0] },
+      top: timelinePresentation.titleTop,
+      textStyle: { fontSize: timelinePresentation.titleFontSize, fontWeight: 700, color: "#1f2937" },
+      subtextStyle: { fontSize: timelinePresentation.subtextFontSize, color: "#7a879b", padding: [8, 0, 0, 0] },
     },
-    grid: { left: 24, right: 24, top: 56, bottom: 36 },
+    grid: timelinePresentation.grid,
     tooltip: {
       trigger: "item",
       formatter: (params) => {
@@ -1315,6 +1664,7 @@ function renderMainlineTimeline() {
       {
         type: "scatter",
         data: scatterData,
+        labelLayout: timelinePresentation.hideOverlap ? { hideOverlap: true } : {},
         z: 2,
       },
     ],
@@ -1479,12 +1829,15 @@ function renderEventsEditor() {
   list.className = "editor-list";
   host.appendChild(list);
 
-  renderGenericRows("events-custom-list", state.events, [
-    { key: "name", label: "名称", type: "text", columnClass: "col-name" },
-    { key: "startDate", label: "开始日期", type: "date", columnClass: "col-date" },
-    { key: "durationDays", label: "持续天数", type: "number", cast: "number", columnClass: "col-day" },
-    { key: "boxes", label: "获得箱子", type: "number", cast: "number", step: "1", columnClass: "col-amount" },
-  ], (index) => {
+  if (isMobileLayout()) {
+    renderCollectionCards("events-custom-list", "events", state.events, (index) => {
+      state.events.splice(index, 1);
+      renderEventsEditor();
+    });
+    return;
+  }
+
+  renderGenericRows("events-custom-list", state.events, EVENT_EDITOR_SCHEMA, (index) => {
     state.events.splice(index, 1);
     renderEventsEditor();
   }, { showHeader: false, gridClass: "events-grid" });
@@ -1494,24 +1847,25 @@ function renderEditors() {
   renderMainlineTimeline();
   renderEventsEditor();
 
-  renderGenericRows("extras-list", state.extras, [
-    { key: "name", label: "名称", type: "text", columnClass: "col-name" },
-    { key: "startDate", label: "开始日期", type: "date", columnClass: "col-date" },
-    { key: "frequency", label: "类型", type: "select", options: EXTRA_FREQUENCIES, columnClass: "col-frequency" },
-    { key: "amount", label: "芯尘箱", type: "number", cast: "number", step: "0.1", columnClass: "col-amount" },
-    { key: "note", label: "备注", type: "text", columnClass: "col-note" },
-  ], (index) => {
+  if (isMobileLayout()) {
+    renderCollectionCards("extras-list", "extras", state.extras, (index) => {
+      state.extras.splice(index, 1);
+      renderEditors();
+    });
+
+    renderCollectionCards("strategies-list", "strategies", state.strategies, (index) => {
+      state.strategies.splice(index, 1);
+      renderEditors();
+    });
+    return;
+  }
+
+  renderGenericRows("extras-list", state.extras, EXTRA_EDITOR_SCHEMA, (index) => {
     state.extras.splice(index, 1);
     renderEditors();
   }, { showHeader: false, gridClass: "extras-grid" });
 
-  renderGenericRows("strategies-list", state.strategies, [
-    { key: "name", label: "名称", type: "text", hideLabel: true },
-    { key: "type", label: "类型", type: "select", options: STRATEGY_TYPES, hideLabel: true },
-    { key: "targetDay", label: "目标天", type: "text", cast: "optionalInt", hideLabel: true },
-    { key: "targetLevel", label: "目标级", type: "text", cast: "optionalInt", hideLabel: true },
-    { key: "note", label: "备注", type: "text", hideLabel: true },
-  ], (index) => {
+  renderGenericRows("strategies-list", state.strategies, DESKTOP_STRATEGY_EDITOR_SCHEMA, (index) => {
     state.strategies.splice(index, 1);
     renderEditors();
   }, { gridClass: "strategies-grid" });
@@ -1533,30 +1887,45 @@ function fillSelect(select, options, value, allowEmpty = false) {
   }
   options.forEach((option) => {
     const el = document.createElement("option");
-    el.value = option;
-    el.textContent = option;
-    if (option === value) el.selected = true;
+    const normalizedOption = typeof option === "string"
+      ? { value: option, label: option }
+      : option;
+    el.value = normalizedOption.value;
+    el.textContent = normalizedOption.label;
+    if (normalizedOption.value === value) el.selected = true;
     select.appendChild(el);
   });
-  if (!options.includes(value) && allowEmpty) select.value = "";
+  if (!options.some((option) => (typeof option === "string" ? option : option.value) === value) && allowEmpty) {
+    select.value = "";
+  }
 }
 
-function activeStrategyNames() {
-  return state.summaries.map((item) => item.name);
+function activeStrategyOptions() {
+  return state.summaries.map((item) => ({
+    value: item.selectionKey,
+    label: item.name,
+  }));
+}
+
+function appendTextCells(tr, values) {
+  values.forEach((value) => {
+    const td = document.createElement("td");
+    td.textContent = value;
+    tr.appendChild(td);
+  });
 }
 
 function renderCharts() {
-  const names = activeStrategyNames();
-  if (!names.length) {
+  if (!state.summaries.length) {
     lineChart.setOption({ title: { text: "运行模拟后显示策略曲线", left: "center", top: "middle" }, series: [] }, true);
     barChart.setOption({ title: { text: "暂无可显示的策略", left: "center", top: "middle" }, series: [] }, true);
     return;
   }
 
-  const lineSeries = names.map((name, index) => {
-    const rows = state.results[name] || [];
+  const lineSeries = state.summaries.map((summary, index) => {
+    const rows = state.results[summary.selectionKey] || [];
     return {
-      name,
+      name: summary.name,
       type: "line",
       smooth: true,
       showSymbol: false,
@@ -1601,48 +1970,140 @@ function renderCharts() {
   }, true);
 }
 
-function renderSummaryTable() {
-  const body = document.getElementById("summary-body");
-  body.innerHTML = "";
-  state.summaries.forEach((row) => {
-    const tr = document.createElement("tr");
-    tr.className = `summary-clickable ${row.name === state.detailStrategy ? "active" : ""}`;
-    tr.innerHTML = `
-      <td>${row.name}</td>
-      <td>${row.strategyType}</td>
-      <td>${row.finalDisplayLevel.toFixed(2)}</td>
-      <td>${row.finalBoxes.toFixed(0)}</td>
-      <td>${row.totalOpenedBoxes.toFixed(0)}</td>
-    `;
-    tr.addEventListener("click", () => {
-      state.detailStrategy = row.name;
-      fillSelect(detailStrategySelect, activeStrategyNames(), state.detailStrategy, true);
+function createMobileCardField(label, value, strong = false) {
+  const item = document.createElement("div");
+  item.className = "mobile-data-card-field";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "mobile-data-card-label";
+  labelEl.textContent = label;
+
+  const valueEl = document.createElement("strong");
+  valueEl.className = strong ? "mobile-data-card-value is-strong" : "mobile-data-card-value";
+  valueEl.textContent = value;
+
+  item.append(labelEl, valueEl);
+  return item;
+}
+
+function renderSummaryCards(rows) {
+  summaryMobileCardsHost.innerHTML = "";
+
+  rows.forEach((row) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `mobile-data-card summary-mobile-card ${row.isActive ? "is-active" : ""}`.trim();
+    card.addEventListener("click", () => {
+      state.detailStrategy = row.selectionKey || state.detailStrategy;
+      fillSelect(detailStrategySelect, activeStrategyOptions(), state.detailStrategy, true);
       renderSummaryTable();
       renderDetailTable();
     });
-    body.appendChild(tr);
+
+    const header = document.createElement("div");
+    header.className = "mobile-data-card-header";
+    header.append(
+      createMobileCardField("策略", row.name, true),
+      createMobileCardField("类型", row.strategyType),
+    );
+
+    const grid = document.createElement("div");
+    grid.className = "mobile-data-card-grid";
+    grid.append(
+      createMobileCardField("最终等级", row.finalLevelText, true),
+      createMobileCardField("剩余箱子", row.finalBoxesText),
+      createMobileCardField("累计开箱", row.totalOpenedText),
+    );
+
+    card.append(header, grid);
+    summaryMobileCardsHost.appendChild(card);
+  });
+}
+
+function renderDetailCards(rows) {
+  detailMobileCardsHost.innerHTML = "";
+
+  rows.forEach((row) => {
+    const card = document.createElement("article");
+    card.className = "mobile-data-card detail-mobile-card";
+
+    const header = document.createElement("div");
+    header.className = "mobile-data-card-header";
+    header.append(
+      createMobileCardField("天数", row.dayText || "--", true),
+      createMobileCardField("等级", row.levelText || "--", true),
+    );
+
+    const grid = document.createElement("div");
+    grid.className = "mobile-data-card-grid";
+    grid.append(
+      createMobileCardField("级内进度", row.progressText),
+      createMobileCardField("箱子", row.boxesText),
+      createMobileCardField("当日开箱", row.openedText),
+      createMobileCardField("日常芯尘", row.dailyDustText),
+      createMobileCardField("额外芯尘", row.extraDustText),
+      createMobileCardField("说明", row.noteText || "--"),
+    );
+
+    card.append(header, grid);
+    detailMobileCardsHost.appendChild(card);
+  });
+}
+
+function renderSummaryTable() {
+  const renderMode = getSummaryRenderMode(currentLayoutMode);
+  summaryBody.innerHTML = "";
+
+  if (renderMode === "cards") {
+    summaryTableWrap.hidden = true;
+    summaryMobileCardsHost.hidden = false;
+    renderSummaryCards(buildMobileSummaryCards(state.summaries, state.detailStrategy));
+    return;
+  }
+
+  summaryTableWrap.hidden = false;
+  summaryMobileCardsHost.hidden = true;
+  state.summaries.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.className = `summary-clickable ${row.selectionKey === state.detailStrategy ? "active" : ""}`;
+    appendTextCells(tr, buildSummaryTableCells(row));
+    tr.addEventListener("click", () => {
+      state.detailStrategy = row.selectionKey;
+      fillSelect(detailStrategySelect, activeStrategyOptions(), state.detailStrategy, true);
+      renderSummaryTable();
+      renderDetailTable();
+    });
+    summaryBody.appendChild(tr);
   });
 }
 
 function renderDetailTable() {
-  const body = document.getElementById("detail-body");
-  body.innerHTML = "";
   const rows = state.results[state.detailStrategy] || [];
+  const renderMode = getDetailViewRenderMode(currentLayoutMode, state.mobileDetailView);
+
+  detailBody.innerHTML = "";
+  detailViewToggle.textContent = getDetailViewToggleLabel(state.mobileDetailView);
+
+  if (currentLayoutMode === "mobile") {
+    detailMobileShell.hidden = false;
+    detailViewToggle.hidden = false;
+  } else {
+    detailMobileShell.hidden = true;
+    detailViewToggle.hidden = true;
+  }
+
+  if (renderMode === "cards") {
+    detailWrap.hidden = true;
+    renderDetailCards(buildMobileDetailCards(rows));
+    return;
+  }
+
+  detailWrap.hidden = false;
+  detailMobileCardsHost.innerHTML = "";
   rows.forEach((row) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.day}</td>
-      <td>${row.level}</td>
-      <td>${row.progressDust.toFixed(0)}</td>
-      <td>${row.nextCost}</td>
-      <td>${row.hourlyRate.toFixed(2)}</td>
-      <td>${row.boxes.toFixed(0)}</td>
-      <td>${row.openedBoxesToday.toFixed(0)}</td>
-      <td>${row.dailyDust.toFixed(0)}</td>
-      <td>${row.extraDust.toFixed(0)}</td>
-      <td>${row.strategyNote || ""}</td>
-    `;
-    body.appendChild(tr);
+    appendTextCells(tr, buildDetailTableCells(row));
+    detailBody.appendChild(tr);
   });
 }
 
@@ -1664,40 +2125,41 @@ function runSimulation() {
       renderCharts();
       renderSummaryTable();
       renderDetailTable();
-      statusText.textContent = missingMessage;
+      toolbarStatusState.statusText = missingMessage;
       renderStatusOverview();
       return;
     }
 
+    state.strategies = ensureStrategyIds(state.strategies);
     const enabledStrategies = state.strategies.filter((strategy) => strategy.enabled);
     if (!enabledStrategies.length) {
       state.results = {};
       state.summaries = [];
-      statusText.textContent = "至少启用一个策略";
+      toolbarStatusState.statusText = "至少启用一个策略";
       renderStatusOverview();
       return;
     }
     state.results = {};
     enabledStrategies.forEach((strategy) => {
-      state.results[strategy.name] = simulate(strategy);
+      state.results[getStrategySelectionKey(strategy)] = simulate(strategy);
     });
     state.summaries = buildSummaries();
-    if (!state.detailStrategy || !state.summaries.some((item) => item.name === state.detailStrategy)) {
-      state.detailStrategy = state.summaries[0]?.name || "";
+    if (!state.detailStrategy || !state.summaries.some((item) => item.selectionKey === state.detailStrategy)) {
+      state.detailStrategy = state.summaries[0]?.selectionKey || "";
     }
-    fillSelect(detailStrategySelect, activeStrategyNames(), state.detailStrategy, true);
+    fillSelect(detailStrategySelect, activeStrategyOptions(), state.detailStrategy, true);
     renderMetrics();
     renderCharts();
     renderSummaryTable();
     renderDetailTable();
     const best = state.summaries[0];
-    statusText.textContent = "计算完成";
+    toolbarStatusState.statusText = "计算完成";
     renderStatusOverview(best);
   } catch (error) {
     state.results = {};
     state.summaries = [];
     console.error(error);
-    statusText.textContent = `计算失败：${error.message}`;
+    toolbarStatusState.statusText = `计算失败：${error.message}`;
     renderStatusOverview();
   }
 }
@@ -1705,7 +2167,8 @@ function runSimulation() {
 function exportCurrentCSV() {
   const rows = state.results[state.detailStrategy];
   if (!rows || !rows.length) {
-    statusText.textContent = "请先计算并选择一个明细策略";
+    toolbarStatusState.statusText = "请先计算并选择一个明细策略";
+    renderCompactStatus();
     return;
   }
   const data = [
@@ -1732,8 +2195,9 @@ function exportCurrentCSV() {
   const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
+  const selectedSummary = state.summaries.find((item) => item.selectionKey === state.detailStrategy);
   link.href = url;
-  link.download = `${state.detailStrategy}_daily_detail.csv`;
+  link.download = `${selectedSummary?.name || state.detailStrategy}_daily_detail.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1746,13 +2210,42 @@ function exportChartPNG() {
   link.click();
 }
 
+function syncCollapsibleSectionState(section, isOpen) {
+  section.classList.toggle("is-open", isOpen);
+  const icon = section.querySelector(".collapse-icon");
+  if (icon) {
+    icon.textContent = isOpen ? "−" : "+";
+  }
+}
+
+function getSectionOpenOverrides(sectionId) {
+  if (!sectionOpenOverrides[sectionId]) {
+    sectionOpenOverrides[sectionId] = {};
+  }
+
+  return sectionOpenOverrides[sectionId];
+}
+
+function syncCollapsibleSectionForLayout(section, layoutMode) {
+  const overrides = getSectionOpenOverrides(section.id);
+  const isOpen = getResponsiveSectionOpenState(
+    section.id,
+    layoutMode,
+    overrides,
+    getInitialSectionOpenState(section.id, "desktop", section.classList.contains("is-open")),
+  );
+  syncCollapsibleSectionState(section, isOpen);
+}
+
 function bindCollapsible() {
   document.querySelectorAll(".collapsible").forEach((section) => {
+    syncCollapsibleSectionForLayout(section, currentLayoutMode);
+
     const toggle = section.querySelector(".collapse-toggle");
     toggle.addEventListener("click", () => {
-      section.classList.toggle("is-open");
-      const icon = section.querySelector(".collapse-icon");
-      icon.textContent = section.classList.contains("is-open") ? "−" : "+";
+      const nextOpen = !section.classList.contains("is-open");
+      getSectionOpenOverrides(section.id)[currentLayoutMode] = nextOpen;
+      syncCollapsibleSectionState(section, nextOpen);
       if (section.id === "section-mainlines") setTimeout(() => mainlineTimelineChart.resize(), 0);
       updateActiveNav();
     });
@@ -1816,9 +2309,13 @@ function bindEvents() {
   ensureEventToolbarButtons();
   const mainlineAdd = document.querySelector('[data-add="mainlines"]');
   if (mainlineAdd) mainlineAdd.closest(".section-toolbar")?.remove();
-  document.getElementById("run-btn").addEventListener("click", runSimulation);
-  document.getElementById("export-csv-btn").addEventListener("click", exportCurrentCSV);
-  document.getElementById("export-png-btn").addEventListener("click", exportChartPNG);
+  toolbarActionsHost?.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button?.id) return;
+    if (button.id === "run-btn") runSimulation();
+    if (button.id === "export-csv-btn") exportCurrentCSV();
+    if (button.id === "export-png-btn") exportChartPNG();
+  });
 
   document.querySelectorAll("[data-add]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1826,7 +2323,12 @@ function bindEvents() {
       if (type === "event-small") state.events.push({ name: "14天小活动", mode: ACTIVITY_MODES.ONCE, startDate: state.params.startDate, durationDays: 14, boxes: 324, locked: false });
       if (type === "event-large") state.events.push({ name: "21天大型活动", mode: ACTIVITY_MODES.ONCE, startDate: state.params.startDate, durationDays: 21, boxes: 472, locked: false });
       if (type === "extras") state.extras.push({ name: "新来源", startDate: state.params.startDate, startDay: 0, endDay: state.params.simulateDays, frequency: "每日", amount: 0, enabled: true, note: "" });
-      if (type === "strategies") state.strategies.push({ name: "新策略", type: "BASELINE", targetDay: null, targetLevel: null, enabled: true, note: "" });
+      if (type === "strategies") {
+        state.strategies = ensureStrategyIds([
+          ...state.strategies,
+          { name: "新策略", type: "BASELINE", targetDay: null, targetLevel: null, enabled: true, note: "" },
+        ]);
+      }
       renderEditors();
     });
   });
@@ -1837,10 +2339,31 @@ function bindEvents() {
     renderDetailTable();
   });
 
+  detailViewToggle?.addEventListener("click", () => {
+    if (currentLayoutMode !== "mobile") return;
+    state.mobileDetailView = state.mobileDetailView === "table" ? "cards" : "table";
+    renderDetailTable();
+  });
+
   window.addEventListener("resize", () => {
     mainlineTimelineChart.resize();
     lineChart.resize();
     barChart.resize();
+    const nextLayoutMode = getCurrentLayoutMode();
+    applyLayoutDensity(nextLayoutMode);
+    if (hasLayoutModeChanged(currentLayoutMode, getCurrentViewportWidth())) {
+      currentLayoutMode = nextLayoutMode;
+      document.querySelectorAll(".collapsible").forEach((section) => {
+        syncCollapsibleSectionForLayout(section, currentLayoutMode);
+      });
+      renderToolbar();
+      renderCompactStatus();
+      renderEditors();
+      renderSummaryTable();
+      renderDetailTable();
+    } else if (state.mainlineModalOpen) {
+      renderMainlineModal();
+    }
     updateActiveNav();
   });
   window.addEventListener("scroll", updateActiveNav, { passive: true });
@@ -1854,7 +2377,10 @@ function bindEvents() {
 
 async function initializeApp() {
   loadParamsFromStorage();
+  applyLayoutDensity(currentLayoutMode);
   buildPageNav();
+  renderToolbar();
+  renderCompactStatus();
   bindCollapsible();
   bindEvents();
   await loadNikkeData();
