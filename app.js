@@ -262,7 +262,7 @@ const state = {
   strategies: ensureStrategyIds([
     { name: "完全囤箱", type: "BASELINE", targetDay: null, targetLevel: null, enabled: true, note: "全程不开箱，只靠自然获取推进，适合作为最保守基线。" },
     { name: "立刻全开", type: "OPEN_ALL_NOW", targetDay: 0, targetLevel: null, enabled: true, note: "开局第一天把现有箱子全部打开，用来观察短期爆发收益。" },
-    { name: "102后再开", type: "NO_BOX", targetDay: null, targetLevel: null, enabled: true, note: "先囤箱到 102 门槛解锁后，再统一开箱，适合稳健思路。" },
+    { name: "门槛后再开", type: "NO_BOX", targetDay: null, targetLevel: null, enabled: true, note: "先囤箱到主线门槛解锁后，再统一开箱，适合稳健思路。" },
     { name: "门槛即开", type: "SMART_GATE", targetDay: null, targetLevel: null, enabled: true, note: "每次遇到主线门槛时，只开到当前门槛需要的量，不额外超开。" },
     { name: "大关卡分段开", type: "OPEN_EVERY_MILESTONE", targetDay: null, targetLevel: null, enabled: true, note: "遇到大关卡节点再分段释放箱子，兼顾推进与资源留存。" },
     { name: "价值判断开箱", type: "SMART_VALUE_GATE", targetDay: null, targetLevel: null, enabled: true, note: "在门槛节点按额外收益与开箱成本做启发式判断，划算时才开箱。" },
@@ -797,8 +797,7 @@ function simulate(strategy) {
   let progressDust = state.params.startProgress;
   let boxes = state.params.startBoxes;
   let mainlineBonus = 0;
-  let unlocked102 = false;
-  let unlockDay = null;
+  let gateUnlockDay = null;
 
   const mainlineByDay = new Map();
   state.mainlines.forEach((update) => {
@@ -830,10 +829,9 @@ function simulate(strategy) {
     releasedUpdatesCount += releasedToday.length;
 
     let pendingInfo = pendingGateInfo(pendingMainlines);
-    if (!unlocked102 && pendingInfo.gateLevel != null && level >= pendingInfo.gateLevel) {
-      unlocked102 = true;
-      unlockDay = day;
-      strategyNote = "开启102";
+    if (gateUnlockDay == null && pendingInfo.gateLevel != null && level >= pendingInfo.gateLevel) {
+      gateUnlockDay = day;
+      strategyNote = "达到门槛";
     }
 
     const preDayActivation = activateAvailableMainlines(pendingMainlines, level);
@@ -898,20 +896,19 @@ function simulate(strategy) {
         dustFromBoxesToday += result.gainedDust;
         strategyNote = `补到大档 ${milestoneLevel}`;
       }
-    } else if (strategy.type === "NO_BOX" && unlocked102 && boxes > 0) {
+    } else if (strategy.type === "NO_BOX" && gateUnlockDay != null && boxes > 0) {
       const result = openBoxes(progressDust, boxes, boxes, currentBoxRate);
       progressDust = result.progressDust;
       boxes = result.boxes;
       openedBoxesToday += result.actual;
       dustFromBoxesToday += result.gainedDust;
-      strategyNote = "102后全开";
+      strategyNote = "门槛后全开";
     }
 
     ({ level, progress: progressDust } = normalizeLevelProgress(level, progressDust));
-    if (!unlocked102 && activeGateLevel != null && level >= activeGateLevel) {
-      unlocked102 = true;
-      unlockDay = day;
-      strategyNote = `${strategyNote} | 开启102`.replace(/^ \| /, "").trim();
+    if (gateUnlockDay == null && activeGateLevel != null && level >= activeGateLevel) {
+      gateUnlockDay = day;
+      strategyNote = `${strategyNote} | 达到门槛`.replace(/^ \| /, "").trim();
     }
 
     const postBoxActivation = activateAvailableMainlines(pendingMainlines, level);
@@ -947,8 +944,8 @@ function simulate(strategy) {
       mainlineBonus,
       activeGateLevel,
       updatesSeen: releasedUpdatesCount,
-      unlocked102,
-      unlockDay,
+      gateUnlocked: gateUnlockDay != null,
+      gateUnlockDay,
       strategyNote,
     });
   }

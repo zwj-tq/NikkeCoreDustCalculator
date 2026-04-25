@@ -93,26 +93,26 @@ test("bindEvents does not assume the detail strategy select always exists", () =
   );
 });
 
-test("default NO_BOX strategy remains the original 102后再开 preset", () => {
+test("default NO_BOX strategy remains the original gate-after-open preset", () => {
   assert.match(
     appSource,
-    /name:\s*"102后再开",\s*type:\s*"NO_BOX"[\s\S]*?note:\s*"先囤箱到 102 门槛解锁后，再统一开箱，适合稳健思路。"/s,
+    /name:\s*"门槛后再开",\s*type:\s*"NO_BOX"[\s\S]*?note:\s*"先囤箱到主线门槛解锁后，再统一开箱，适合稳健思路。"/s,
   );
   assert.match(
     appSource,
-    /function simulate\(strategy\)[\s\S]*?let unlocked102 = false;[\s\S]*?let unlockDay = null;/s,
+    /function simulate\(strategy\)[\s\S]*?let gateUnlockDay = null;/s,
   );
   assert.match(
     appSource,
-    /if \(!unlocked102 && activeGateLevel != null && level >= activeGateLevel\) \{[\s\S]*?unlocked102 = true;[\s\S]*?unlockDay = day;[\s\S]*?strategyNote = `\$\{strategyNote\} \| 开启102`/s,
+    /if \(gateUnlockDay == null && activeGateLevel != null && level >= activeGateLevel\) \{[\s\S]*?gateUnlockDay = day;[\s\S]*?strategyNote = `\$\{strategyNote\} \| 达到门槛`/s,
   );
   assert.match(
     appSource,
-    /strategy\.type === "NO_BOX" && unlocked102 && boxes > 0[\s\S]*?strategyNote = "102后全开";/s,
+    /strategy\.type === "NO_BOX" && gateUnlockDay != null && boxes > 0[\s\S]*?strategyNote = "门槛后全开";/s,
   );
   assert.match(
     appSource,
-    /states\.push\(\{[\s\S]*?unlocked102,[\s\S]*?unlockDay,[\s\S]*?strategyNote,/s,
+    /states\.push\(\{[\s\S]*?gateUnlocked: gateUnlockDay != null,[\s\S]*?gateUnlockDay,[\s\S]*?strategyNote,/s,
   );
 });
 
