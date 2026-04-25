@@ -100,7 +100,19 @@ test("default NO_BOX strategy remains the original 102后再开 preset", () => {
   );
   assert.match(
     appSource,
+    /function simulate\(strategy\)[\s\S]*?let unlocked102 = false;[\s\S]*?let unlockDay = null;/s,
+  );
+  assert.match(
+    appSource,
+    /if \(!unlocked102 && activeGateLevel != null && level >= activeGateLevel\) \{[\s\S]*?unlocked102 = true;[\s\S]*?unlockDay = day;[\s\S]*?strategyNote = `\$\{strategyNote\} \| 开启102`/s,
+  );
+  assert.match(
+    appSource,
     /strategy\.type === "NO_BOX" && unlocked102 && boxes > 0[\s\S]*?strategyNote = "102后全开";/s,
+  );
+  assert.match(
+    appSource,
+    /states\.push\(\{[\s\S]*?unlocked102,[\s\S]*?unlockDay,[\s\S]*?strategyNote,/s,
   );
 });
 

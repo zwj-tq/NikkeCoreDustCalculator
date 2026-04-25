@@ -771,6 +771,8 @@ function simulate(strategy) {
   let progressDust = state.params.startProgress;
   let boxes = state.params.startBoxes;
   let mainlineBonus = 0;
+  let unlocked102 = false;
+  let unlockDay = null;
 
   const mainlineByDay = new Map();
   state.mainlines.forEach((update) => {
@@ -800,11 +802,18 @@ function simulate(strategy) {
     pendingMainlines = pendingMainlines.concat(releasedToday);
     releasedUpdatesCount += releasedToday.length;
 
+    let pendingInfo = pendingGateInfo(pendingMainlines);
+    if (!unlocked102 && pendingInfo.gateLevel != null && level >= pendingInfo.gateLevel) {
+      unlocked102 = true;
+      unlockDay = day;
+      strategyNote = "开启102";
+    }
+
     const preDayActivation = activateAvailableMainlines(pendingMainlines, level);
     if (preDayActivation.gainedBonus > 0) mainlineBonus += preDayActivation.gainedBonus;
     pendingMainlines = preDayActivation.remaining;
 
-    let pendingInfo = pendingGateInfo(pendingMainlines);
+    pendingInfo = pendingGateInfo(pendingMainlines);
     let activeGateLevel = pendingInfo.gateLevel;
     let hourlyRate = computeBaseHourlyRate(level, mainlineBonus);
     const currentBoxRate = hourlyRate;
@@ -872,6 +881,12 @@ function simulate(strategy) {
     }
 
     ({ level, progress: progressDust } = normalizeLevelProgress(level, progressDust));
+    if (!unlocked102 && activeGateLevel != null && level >= activeGateLevel) {
+      unlocked102 = true;
+      unlockDay = day;
+      strategyNote = `${strategyNote} | 开启102`.replace(/^ \| /, "").trim();
+    }
+
     const postBoxActivation = activateAvailableMainlines(pendingMainlines, level);
     if (postBoxActivation.gainedBonus > 0) {
       mainlineBonus += postBoxActivation.gainedBonus;
@@ -905,6 +920,8 @@ function simulate(strategy) {
       mainlineBonus,
       activeGateLevel,
       updatesSeen: releasedUpdatesCount,
+      unlocked102,
+      unlockDay,
       strategyNote,
     });
   }
