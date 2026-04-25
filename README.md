@@ -28,7 +28,7 @@ https://zwj-tq.github.io/NikkeCoreDustCalculator/
 
 - `index.html`：页面结构
 - `styles.css`：页面样式
-- `nikke-data.js`：NIKKE 主线进度与基地等级本地快照
+- `nikke-data.js`：NIKKE 主线进度与基地等级本地快照，由 GitHub Actions 定时同步
 - `app.js`：模拟逻辑与交互逻辑
 
 ## 本地使用
@@ -43,11 +43,28 @@ https://zwj-tq.github.io/NikkeCoreDustCalculator/
 2. 在仓库 `Settings -> Pages` 中选择部署分支。
 3. 如果使用仓库根目录作为发布目录，则入口文件为 `index.html`。
 
+## 数据同步
+
+浏览器端只读取仓库内置的 `nikke-data.js` 快照，不再直接请求 `nikkeoutpost.netlify.app`，避免 GitHub Pages 跨域访问外部 JSON 时触发 CORS 拦截。
+
+远程数据刷新由 `.github/workflows/sync-nikke-data.yml` 完成：
+
+- 每天定时运行一次，也可以在 GitHub Actions 页面手动触发。
+- 运行 `npm run sync:nikke-data` 拉取 `chapters.json` 与 `outpost.json`。
+- 生成新的 `nikke-data.js` 后先运行测试。
+- 如果快照有变化，Action 会自动提交更新。
+
+本地手动同步：
+
+```bash
+npm run sync:nikke-data
+```
+
 ## 数据来源与鸣谢
 
 部分规则整理与数值校对参考了 NIKKE 相关社区工具与资料。
 
-当前版本会优先尝试读取 `NIKKE Outpost` 的远程章节 / 基地产出数据；若浏览器环境无法直接跨域拉取，则自动回退到仓库内置的 `nikke-data.js` 快照。
+当前版本通过 GitHub Actions 定时同步 `NIKKE Outpost` 的远程章节 / 基地产出数据，并将结果保存为仓库内置的 `nikke-data.js` 快照。
 
 感谢：
 

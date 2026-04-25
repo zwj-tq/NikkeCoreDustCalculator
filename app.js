@@ -96,7 +96,6 @@ const FIXED_HOURS_PER_SWEEP = 2;
 const FIXED_FIRST_BIG_LEVEL = 381;
 const FIXED_BIG_INTERVAL = 20;
 const DEFAULT_START_DATE = new Date().toISOString().slice(0, 10);
-const NIKKE_REMOTE_BASE = "https://nikkeoutpost.netlify.app";
 const FALLBACK_NIKKE_DATA = window.NIKKE_DATA_SNAPSHOT || null;
 const echarts = window.echarts;
 const PARAMS_STORAGE_KEY = "nikke_calc_params";
@@ -530,21 +529,6 @@ function syncDerivedProgressData() {
 
 async function loadNikkeData() {
   applyNikkeData(state.nikkeData, state.nikkeData.sourceLabel);
-
-  try {
-    const [chaptersResponse, outpostResponse] = await Promise.all([
-      fetch(`${NIKKE_REMOTE_BASE}/chapters.json`),
-      fetch(`${NIKKE_REMOTE_BASE}/outpost.json`),
-    ]);
-    if (!chaptersResponse.ok || !outpostResponse.ok) throw new Error("远程数据请求失败");
-    const [chaptersPayload, outpostPayload] = await Promise.all([
-      chaptersResponse.json(),
-      outpostResponse.json(),
-    ]);
-    applyNikkeData(normalizeNikkeData(chaptersPayload, outpostPayload), "远程实时");
-  } catch (error) {
-    console.warn("NIKKE 数据动态加载失败，已回退到本地快照。", error);
-  }
 }
 
 function normalizeFrequency(value) {

@@ -1,0 +1,41 @@
+name: Sync NIKKE Data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 18 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sync data snapshot
+        run: npm run sync:nikke-data
+
+      - name: Run tests
+        run: npm test
+
+      - name: Commit updated snapshot
+        run: |
+          if git diff --quiet -- nikke-data.js; then
+            echo "No NIKKE data snapshot changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nikke-data.js
+          git commit -m "chore: sync nikke data snapshot" -m "Co-Authored-By: Codex <noreply@openai.com>"
+          git push
