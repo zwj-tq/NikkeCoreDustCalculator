@@ -35,6 +35,7 @@ const CHART_COLORS = [
 ];
 
 const EXTRA_FREQUENCIES = ["每日", "每周", "每月", "一次性"];
+const EXTRA_RESOURCE_TYPES = ["芯尘箱", "芯尘"];
 const STRATEGY_TYPES = [
   "BASELINE",
   "OPEN_ALL_NOW",
@@ -56,7 +57,8 @@ const EXTRA_EDITOR_SCHEMA = [
   { key: "name", label: "名称", type: "text", columnClass: "col-name" },
   { key: "startDate", label: "开始日期", type: "date", columnClass: "col-date" },
   { key: "frequency", label: "类型", type: "select", options: EXTRA_FREQUENCIES, columnClass: "col-frequency" },
-  { key: "amount", label: "芯尘箱", type: "number", cast: "number", step: "0.1", columnClass: "col-amount" },
+  { key: "resourceType", label: "资源", type: "select", options: EXTRA_RESOURCE_TYPES, columnClass: "col-frequency" },
+  { key: "amount", label: "数量", type: "number", cast: "number", step: "0.1", columnClass: "col-amount" },
   { key: "note", label: "备注", type: "text", columnClass: "col-note" },
 ];
 
@@ -253,9 +255,9 @@ const state = {
     mode: ACTIVITY_EDITOR_MODES.PRESET,
   },
   extras: [
-    { name: "每日补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每日", amount: 0, enabled: true, note: "" },
-    { name: "每周补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每周", amount: 0, enabled: true, note: "" },
-    { name: "每月补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每月", amount: 0, enabled: true, note: "" },
+    { name: "每日补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每日", resourceType: "芯尘箱", amount: 0, enabled: true, note: "" },
+    { name: "每周补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每周", resourceType: "芯尘箱", amount: 0, enabled: true, note: "" },
+    { name: "每月补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每月", resourceType: "芯尘箱", amount: 0, enabled: true, note: "" },
   ],
   strategies: ensureStrategyIds([
     { name: "完全囤箱", type: "BASELINE", targetDay: null, targetLevel: null, enabled: true, note: "全程不开箱，只靠自然获取推进，适合作为最保守基线。" },
@@ -555,6 +557,14 @@ function normalizeFrequency(value) {
   return text;
 }
 
+function normalizeExtraResourceType(value) {
+  const text = String(value ?? "").trim();
+  const lowered = text.toLowerCase();
+  if (text === "芯尘" || lowered === "dust" || lowered === "core dust" || lowered === "core_dust") return "芯尘";
+  if (text === "芯尘箱" || lowered === "box" || lowered === "boxes" || lowered === "core dust box" || lowered === "core_dust_box") return "芯尘箱";
+  return "芯尘箱";
+}
+
 function dayToDate(day) {
   const base = parseDateInput(state.params.startDate) ?? new Date();
   base.setDate(base.getDate() + day);
@@ -602,6 +612,22 @@ function isExtraTriggered(extra, day) {
   }
   if (frequency === "一次性") return day === startDay;
   return false;
+}
+
+function summarizeTriggeredExtras(extras, day) {
+  return extras.reduce((totals, extra) => {
+    if (extra?.enabled === false || !isExtraTriggered(extra, day)) return totals;
+    const amount = Number(extra.amount || 0);
+    if (normalizeExtraResourceType(extra.resourceType) === "芯尘") {
+      totals.extraDust += amount;
+    } else {
+      totals.extraBoxes += amount;
+    }
+    return totals;
+  }, {
+    extraBoxes: 0,
+    extraDust: 0,
+  });
 }
 
 function isActivityTriggered(activity, day) {
@@ -796,7 +822,8 @@ function simulate(strategy) {
     const activityBoxes = effectiveEvents().reduce((sum, event) => {
       return sum + (isActivityTriggered(event, day) ? Number(event.boxes || 0) : 0);
     }, 0);
-    boxes += activityBoxes;
+    const { extraBoxes, extraDust } = summarizeTriggeredExtras(activeExtras, day);
+    boxes += activityBoxes + extraBoxes;
 
     const releasedToday = mainlineByDay.get(day) || [];
     pendingMainlines = pendingMainlines.concat(releasedToday);
@@ -899,7 +926,6 @@ function simulate(strategy) {
     hourlyRate = computeBaseHourlyRate(level, mainlineBonus);
 
     const dailyDust = hourlyRate * dailyHours();
-    const extraDust = activeExtras.reduce((sum, extra) => sum + (isExtraTriggered(extra, day) ? Number(extra.amount || 0) : 0), 0);
     progressDust += dailyDust + extraDust;
     ({ level, progress: progressDust } = normalizeLevelProgress(level, progressDust));
 
@@ -915,6 +941,7 @@ function simulate(strategy) {
       openedBoxesToday,
       dustFromBoxesToday,
       dailyDust,
+      extraBoxes,
       extraDust,
       activityBoxes,
       mainlineBonus,
@@ -2069,6 +2096,7 @@ function renderDetailCards(rows) {
       createMobileCardField("箱子", row.boxesText),
       createMobileCardField("当日开箱", row.openedText),
       createMobileCardField("日常芯尘", row.dailyDustText),
+      createMobileCardField("额外箱子", row.extraBoxesText),
       createMobileCardField("额外芯尘", row.extraDustText),
       createMobileCardField("说明", row.noteText || "--"),
     );
@@ -2202,7 +2230,7 @@ function exportCurrentCSV() {
     return;
   }
   const data = [
-    ["day", "level", "progress_dust", "next_level_cost", "display_level", "hourly_rate", "boxes", "opened_boxes_today", "daily_dust", "extra_dust", "activity_boxes", "mainline_bonus", "active_gate_level", "updates_seen", "strategy_note"],
+    ["day", "level", "progress_dust", "next_level_cost", "display_level", "hourly_rate", "boxes", "opened_boxes_today", "daily_dust", "extra_boxes", "extra_dust", "activity_boxes", "mainline_bonus", "active_gate_level", "updates_seen", "strategy_note"],
     ...rows.map((row) => [
       row.day,
       row.level,
@@ -2213,6 +2241,7 @@ function exportCurrentCSV() {
       row.boxes.toFixed(0),
       row.openedBoxesToday.toFixed(0),
       row.dailyDust.toFixed(2),
+      row.extraBoxes.toFixed(2),
       row.extraDust.toFixed(2),
       row.activityBoxes.toFixed(2),
       row.mainlineBonus.toFixed(2),
@@ -2352,7 +2381,7 @@ function bindEvents() {
       const type = button.dataset.add;
       if (type === "event-small") state.events.push({ name: "14天小活动", mode: ACTIVITY_MODES.ONCE, startDate: state.params.startDate, durationDays: 14, boxes: 324, locked: false });
       if (type === "event-large") state.events.push({ name: "21天大型活动", mode: ACTIVITY_MODES.ONCE, startDate: state.params.startDate, durationDays: 21, boxes: 472, locked: false });
-      if (type === "extras") state.extras.push({ name: "新来源", startDate: state.params.startDate, startDay: 0, endDay: state.params.simulateDays, frequency: "每日", amount: 0, enabled: true, note: "" });
+      if (type === "extras") state.extras.push({ name: "新来源", startDate: state.params.startDate, startDay: 0, endDay: state.params.simulateDays, frequency: "每日", resourceType: "芯尘箱", amount: 0, enabled: true, note: "" });
       if (type === "strategies") {
         state.strategies = ensureStrategyIds([
           ...state.strategies,

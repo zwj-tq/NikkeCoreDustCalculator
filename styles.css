@@ -810,7 +810,7 @@ select {
 }
 
 .editor-grid.extras-grid {
-  grid-template-columns: minmax(160px, 1.3fr) minmax(170px, 1.05fr) minmax(120px, 0.8fr) minmax(120px, 0.75fr) minmax(180px, 1.2fr) 38px;
+  grid-template-columns: minmax(160px, 1.15fr) minmax(168px, 1fr) minmax(110px, 0.78fr) minmax(110px, 0.78fr) minmax(110px, 0.72fr) minmax(180px, 1.15fr) 38px;
   align-items: stretch;
 }
 

@@ -174,6 +174,7 @@ export function buildMobileDetailCards(rows) {
     boxesText: Number(row.boxes || 0).toFixed(0),
     openedText: Number(row.openedBoxesToday || 0).toFixed(0),
     dailyDustText: Number(row.dailyDust || 0).toFixed(0),
+    extraBoxesText: Number(row.extraBoxes || 0).toFixed(0),
     extraDustText: Number(row.extraDust || 0).toFixed(0),
     noteText: row.strategyNote || "",
   }));
@@ -298,6 +299,7 @@ export function buildDetailTableCells(row) {
     Number(row.boxes || 0).toFixed(0),
     Number(row.openedBoxesToday || 0).toFixed(0),
     Number(row.dailyDust || 0).toFixed(0),
+    Number(row.extraBoxes || 0).toFixed(0),
     Number(row.extraDust || 0).toFixed(0),
     String(row.strategyNote || ""),
   ];
@@ -328,7 +330,8 @@ export function buildCollectionCardFields(kind, row) {
     return [
       { key: "name", label: "名称", value: row.name ?? "" },
       { key: "frequency", label: "类型", value: row.frequency ?? "" },
-      { key: "amount", label: "芯尘箱", value: row.amount ?? "" },
+      { key: "resourceType", label: "资源", value: row.resourceType ?? "芯尘箱" },
+      { key: "amount", label: "数量", value: row.amount ?? "" },
       { key: "range", label: "起始范围", value: buildExtraRangeText(row) },
       { key: "note", label: "备注", value: row.note ?? "" },
     ];
@@ -357,9 +360,10 @@ export function buildCollectionCardHeader(kind, row) {
   }
 
   if (kind === "extras") {
+    const subtitleParts = [row.frequency ?? "", row.resourceType ?? "芯尘箱"].filter(Boolean);
     return {
       title: row.name ?? "",
-      subtitle: row.frequency ?? "",
+      subtitle: subtitleParts.join(" · "),
       statusText: "",
     };
   }

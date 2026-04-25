@@ -303,6 +303,7 @@ test("buildMobileDetailCards maps detail rows into readable card fields", () => 
       boxes: 88,
       openedBoxesToday: 3,
       dailyDust: 412,
+      extraBoxes: 9,
       extraDust: 120,
       strategyNote: "活动补给",
     },
@@ -315,6 +316,7 @@ test("buildMobileDetailCards maps detail rows into readable card fields", () => 
     boxesText: "88",
     openedText: "3",
     dailyDustText: "412",
+    extraBoxesText: "9",
     extraDustText: "120",
     noteText: "活动补给",
   });
@@ -328,6 +330,7 @@ test("buildMobileDetailCards falls back when day is missing", () => {
       boxes: 88,
       openedBoxesToday: 3,
       dailyDust: 412,
+      extraBoxes: 9,
       extraDust: 120,
       strategyNote: "活动补给",
     },
@@ -340,6 +343,7 @@ test("buildMobileDetailCards falls back when day is missing", () => {
     boxesText: "88",
     openedText: "3",
     dailyDustText: "412",
+    extraBoxesText: "9",
     extraDustText: "120",
     noteText: "活动补给",
   });
@@ -498,6 +502,7 @@ test("buildCollectionCardFields returns extra fields in mobile order", () => {
     startDay: 0,
     endDay: 30,
     frequency: "每日",
+    resourceType: "芯尘",
     amount: 12,
     note: "活动商店",
   });
@@ -505,7 +510,8 @@ test("buildCollectionCardFields returns extra fields in mobile order", () => {
   assert.deepEqual(fields, [
     { key: "name", label: "名称", value: "每日补充" },
     { key: "frequency", label: "类型", value: "每日" },
-    { key: "amount", label: "芯尘箱", value: 12 },
+    { key: "resourceType", label: "资源", value: "芯尘" },
+    { key: "amount", label: "数量", value: 12 },
     { key: "range", label: "起始范围", value: "2026-04-25 · 第 0-30 天" },
     { key: "note", label: "备注", value: "活动商店" },
   ]);
@@ -529,11 +535,12 @@ test("buildCollectionCardHeader uses frequency for extra subtitle", () => {
   const header = buildCollectionCardHeader("extras", {
     name: "每日补充",
     frequency: "每日",
+    resourceType: "芯尘箱",
   });
 
   assert.deepEqual(header, {
     title: "每日补充",
-    subtitle: "每日",
+    subtitle: "每日 · 芯尘箱",
     statusText: "",
   });
 });
@@ -566,6 +573,7 @@ test("buildDetailTableCells returns plain text values for rendering", () => {
     boxes: 88,
     openedBoxesToday: 3,
     dailyDust: 412,
+    extraBoxes: 9,
     extraDust: 120,
     strategyNote: "<b>活动补给</b>",
   });
@@ -579,9 +587,25 @@ test("buildDetailTableCells returns plain text values for rendering", () => {
     "88",
     "3",
     "412",
+    "9",
     "120",
     "<b>活动补给</b>",
   ]);
+});
+
+test("extra sources distinguish boxes from dust in simulation flow", () => {
+  assert.match(
+    appSource,
+    /const \{ extraBoxes, extraDust \} = summarizeTriggeredExtras\(activeExtras, day\);[\s\S]*?boxes \+= activityBoxes \+ extraBoxes;/s,
+  );
+  assert.match(
+    appSource,
+    /function summarizeTriggeredExtras\(extras, day\) \{[\s\S]*?normalizeExtraResourceType\(extra\.resourceType\) === "芯尘"[\s\S]*?totals\.extraDust \+= amount;[\s\S]*?totals\.extraBoxes \+= amount;/s,
+  );
+  assert.match(
+    appSource,
+    /progressDust \+= dailyDust \+ extraDust;/s,
+  );
 });
 
 test("ensureStrategyIds preserves ids and fills unique ids for duplicate names", () => {
