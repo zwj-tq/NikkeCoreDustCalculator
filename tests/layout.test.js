@@ -72,6 +72,27 @@ test("resize handler refreshes density tokens even when staying in the same brea
   );
 });
 
+test("fillSelect safely no-ops when a target select is missing", () => {
+  assert.match(
+    appSource,
+    /function fillSelect\(select, options, value, allowEmpty = false\)\s*\{\s*if \(!select\) return;/s,
+  );
+});
+
+test("detail render path guards against missing DOM nodes", () => {
+  assert.match(
+    appSource,
+    /function renderDetailTable\(\)\s*\{[\s\S]*?if \(!detailBody \|\| !detailViewToggle \|\| !detailWrap \|\| !detailMobileShell \|\| !detailMobileCardsHost\) return;/s,
+  );
+});
+
+test("bindEvents does not assume the detail strategy select always exists", () => {
+  assert.match(
+    appSource,
+    /detailStrategySelect\?\.\s*addEventListener\("change"/s,
+  );
+});
+
 test("getLayoutDensityTokens enlarges touch targets and typography on mobile", () => {
   const desktop = getLayoutDensityTokens("desktop");
   const mobile = getLayoutDensityTokens("mobile", 390);

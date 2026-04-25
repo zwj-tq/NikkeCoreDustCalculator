@@ -1878,6 +1878,7 @@ function renderMetrics() {
 }
 
 function fillSelect(select, options, value, allowEmpty = false) {
+  if (!select) return;
   select.innerHTML = "";
   if (allowEmpty) {
     const empty = document.createElement("option");
@@ -2051,6 +2052,7 @@ function renderDetailCards(rows) {
 }
 
 function renderSummaryTable() {
+  if (!summaryBody || !summaryTableWrap || !summaryMobileCardsHost) return;
   const renderMode = getSummaryRenderMode(currentLayoutMode);
   summaryBody.innerHTML = "";
 
@@ -2078,6 +2080,7 @@ function renderSummaryTable() {
 }
 
 function renderDetailTable() {
+  if (!detailBody || !detailViewToggle || !detailWrap || !detailMobileShell || !detailMobileCardsHost) return;
   const rows = state.results[state.detailStrategy] || [];
   const renderMode = getDetailViewRenderMode(currentLayoutMode, state.mobileDetailView);
 
@@ -2333,7 +2336,7 @@ function bindEvents() {
     });
   });
 
-  detailStrategySelect.addEventListener("change", (event) => {
+  detailStrategySelect?.addEventListener("change", (event) => {
     state.detailStrategy = event.target.value;
     renderSummaryTable();
     renderDetailTable();
