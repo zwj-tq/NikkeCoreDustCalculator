@@ -109,6 +109,15 @@ const PERSISTED_PARAM_KEYS = [
   "startDate",
   "endDate",
 ];
+const NON_EMPTY_PERSISTED_PARAM_KEYS = new Set([
+  "startLevel",
+  "startBoxes",
+  "latestMainlineChapter",
+  "simulateDays",
+  "paidSweeps",
+  "startDate",
+  "endDate",
+]);
 
 const TOOLBAR_ACTIONS = [
   { id: "run-btn", label: "重新计算", className: "primary-btn", priority: "primary" },
@@ -217,15 +226,15 @@ function syncMainlineChaptersByDate() {
 
 const state = {
   params: {
-    startLevel: "",
+    startLevel: 378,
     startProgress: 0,
-    startHourlyRate: "",
-    startBoxes: "",
-    latestMainlineChapter: "",
+    startHourlyRate: 79,
+    startBoxes: 1800,
+    latestMainlineChapter: "34",
     currentNormalStageId: "",
     currentHardStageId: "",
-    currentBaseLevel: "",
-    currentMainlineChapter: "",
+    currentBaseLevel: 1,
+    currentMainlineChapter: 34,
     simulateDays: 300,
     paidSweeps: 2,
     bigRateBonus: 1.5,
@@ -233,11 +242,11 @@ const state = {
     endDate: offsetDateString(DEFAULT_START_DATE, 300),
   },
   mainlines: [
-    { chapter: 36, date: offsetDateString(DEFAULT_START_DATE, 50), rateBonus: 2.5, gateLevel: null },
-    { chapter: 38, date: offsetDateString(DEFAULT_START_DATE, 100), rateBonus: 2.5, gateLevel: null },
-    { chapter: 40, date: offsetDateString(DEFAULT_START_DATE, 150), rateBonus: 2.5, gateLevel: null },
-    { chapter: 42, date: offsetDateString(DEFAULT_START_DATE, 200), rateBonus: 2.5, gateLevel: null },
-    { chapter: 44, date: offsetDateString(DEFAULT_START_DATE, 250), rateBonus: 2.5, gateLevel: null },
+    { chapter: 36, date: offsetDateString(DEFAULT_START_DATE, 50), rateBonus: 2, gateLevel: null },
+    { chapter: 38, date: offsetDateString(DEFAULT_START_DATE, 100), rateBonus: 2, gateLevel: null },
+    { chapter: 40, date: offsetDateString(DEFAULT_START_DATE, 150), rateBonus: 2, gateLevel: 501 },
+    { chapter: 42, date: offsetDateString(DEFAULT_START_DATE, 200), rateBonus: 2, gateLevel: 481 },
+    { chapter: 44, date: offsetDateString(DEFAULT_START_DATE, 250), rateBonus: 2, gateLevel: 441 },
   ],
   events: [],
   activityConfig: {
@@ -361,7 +370,9 @@ function loadParamsFromStorage() {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     PERSISTED_PARAM_KEYS.forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(parsed, key)) state.params[key] = parsed[key];
+      if (!Object.prototype.hasOwnProperty.call(parsed, key)) return;
+      if (NON_EMPTY_PERSISTED_PARAM_KEYS.has(key) && parsed[key] === "") return;
+      state.params[key] = parsed[key];
     });
   } catch (error) {
     console.warn("读取本地存储失败，已忽略。", error);
@@ -500,12 +511,11 @@ function syncDerivedProgressData() {
     state.params.currentHardStageId = "";
   }
 
-  if (!state.params.currentNormalStageId || !findStageLabelById(normalOptions, state.params.currentNormalStageId)) {
+  if (state.params.currentNormalStageId && !findStageLabelById(normalOptions, state.params.currentNormalStageId)) {
     state.params.currentNormalStageId = "";
-    state.params.currentBaseLevel = "";
-    state.params.startHourlyRate = "";
-    state.params.currentMainlineChapter = "";
-    return;
+  }
+  if (!state.params.currentNormalStageId) {
+    state.params.currentNormalStageId = findLastStageIdForChapter(state.params.currentMainlineChapter, normalOptions) || normalOptions[0].id;
   }
 
   const currentChapter = chapterFromStageLabel(findStageLabelById(normalOptions, state.params.currentNormalStageId));
@@ -513,7 +523,7 @@ function syncDerivedProgressData() {
 
   const baseLevel = computeOutpostLevel(state.params.currentNormalStageId, state.params.currentHardStageId);
   state.params.currentBaseLevel = baseLevel;
-  state.params.startHourlyRate = state.nikkeData.outpostCoreDustMul[baseLevel] || "";
+  state.params.startHourlyRate = state.nikkeData.outpostCoreDustMul[baseLevel] || state.params.startHourlyRate;
 }
 
 async function loadNikkeData() {

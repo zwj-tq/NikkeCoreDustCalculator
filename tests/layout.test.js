@@ -104,6 +104,39 @@ test("default NO_BOX strategy remains the original 102后再开 preset", () => {
   );
 });
 
+test("initial calculator sample values remain populated", () => {
+  assert.match(
+    appSource,
+    /params:\s*\{[\s\S]*?startLevel:\s*378,[\s\S]*?startProgress:\s*0,[\s\S]*?startHourlyRate:\s*79,[\s\S]*?startBoxes:\s*1800,[\s\S]*?latestMainlineChapter:\s*"34",[\s\S]*?currentBaseLevel:\s*1,[\s\S]*?currentMainlineChapter:\s*34,/s,
+  );
+  assert.match(
+    appSource,
+    /mainlines:\s*\[[\s\S]*?\{ chapter:\s*36,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*null \}[\s\S]*?\{ chapter:\s*40,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*501 \}[\s\S]*?\{ chapter:\s*42,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*481 \}[\s\S]*?\{ chapter:\s*44,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*441 \}/s,
+  );
+});
+
+test("missing normal progress defaults to the current mainline chapter", () => {
+  assert.match(
+    appSource,
+    /if \(!state\.params\.currentNormalStageId\) \{[\s\S]*?state\.params\.currentNormalStageId = findLastStageIdForChapter\(state\.params\.currentMainlineChapter, normalOptions\) \|\| normalOptions\[0\]\.id;[\s\S]*?\}/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /state\.params\.startHourlyRate = "";\s*state\.params\.currentMainlineChapter = "";\s*return;/s,
+  );
+});
+
+test("empty persisted params cannot overwrite populated defaults", () => {
+  assert.match(
+    appSource,
+    /const NON_EMPTY_PERSISTED_PARAM_KEYS = new Set\(\[[\s\S]*?"startLevel"[\s\S]*?"startBoxes"[\s\S]*?"latestMainlineChapter"[\s\S]*?\]\);/s,
+  );
+  assert.match(
+    appSource,
+    /if \(NON_EMPTY_PERSISTED_PARAM_KEYS\.has\(key\) && parsed\[key\] === ""\) return;/s,
+  );
+});
+
 test("getLayoutDensityTokens enlarges touch targets and typography on mobile", () => {
   const desktop = getLayoutDensityTokens("desktop");
   const mobile = getLayoutDensityTokens("mobile", 390);
