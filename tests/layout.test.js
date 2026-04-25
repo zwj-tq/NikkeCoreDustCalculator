@@ -608,6 +608,21 @@ test("extra sources distinguish boxes from dust in simulation flow", () => {
   );
 });
 
+test("mainline modal exposes gate level editing and tooltip output", () => {
+  assert.match(
+    appSource,
+    /<span class="field-label">门槛等级<\/span>[\s\S]*?id="mainline-modal-gate"[\s\S]*?placeholder="留空表示无门槛"/s,
+  );
+  assert.match(
+    appSource,
+    /bindValue\("mainline-modal-gate",[\s\S]*?current\.gateLevel = parseOptionalInt\(value\);/s,
+  );
+  assert.match(
+    appSource,
+    /const gateText = item\.gateLevel == null \? "无" : item\.gateLevel;[\s\S]*?门槛等级：\$\{gateText\}/s,
+  );
+});
+
 test("ensureStrategyIds preserves ids and fills unique ids for duplicate names", () => {
   const strategies = ensureStrategyIds([
     { id: "strategy-existing", name: "同名策略", type: "BASELINE" },

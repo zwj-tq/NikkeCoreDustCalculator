@@ -1581,6 +1581,9 @@ function renderMainlineModal() {
           <input id="mainline-modal-rate" class="field-control" type="number" step="0.1" value="${current.rateBonus}">
         </label>
         <label class="field col-number col-inline-half">
+          <span class="field-label">门槛等级</span>
+          <input id="mainline-modal-gate" class="field-control" type="number" step="1" value="${current.gateLevel ?? ""}" placeholder="留空表示无门槛">
+        </label>
       </div>
       <div class="mainline-modal-actions">
         <button class="ghost-btn danger-btn" type="button" id="mainline-modal-delete">删除节点</button>
@@ -1605,6 +1608,9 @@ function renderMainlineModal() {
   }, { eventName: "change", rerender: true });
   bindValue("mainline-modal-rate", (value) => {
     current.rateBonus = Number(value || 0);
+  }, { eventName: "change", rerender: true });
+  bindValue("mainline-modal-gate", (value) => {
+    current.gateLevel = parseOptionalInt(value);
   }, { eventName: "change", rerender: true });
   mainlineModalRoot.querySelectorAll('[data-close="modal"]').forEach((node) => {
     node.addEventListener("click", closeMainlineModal);
@@ -1669,7 +1675,8 @@ function renderMainlineTimeline() {
       formatter: (params) => {
         const item = entries.find((entry) => entry.index === params.data.originalIndex);
         if (!item) return "";
-        return `${item.label}<br>${item.date}<br>芯尘获取增加：${item.rateBonus}`;
+        const gateText = item.gateLevel == null ? "无" : item.gateLevel;
+        return `${item.label}<br>${item.date}<br>芯尘获取增加：${item.rateBonus}<br>门槛等级：${gateText}`;
       },
     },
     xAxis: {
