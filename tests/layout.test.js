@@ -28,6 +28,7 @@ import {
 } from "../ui/layout.js";
 
 const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const indexSource = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const stylesSource = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 
 test("getLayoutMode returns mobile at and below 720px", () => {
@@ -62,6 +63,32 @@ test("mobile editor rendering does not branch on raw window.innerWidth", () => {
   assert.doesNotMatch(
     appSource,
     /function isMobileLayout\(\)\s*\{\s*return getLayoutMode\(window\.innerWidth\) === "mobile";\s*\}/s,
+  );
+});
+
+test("app.js consumes layout helpers from the preloaded global bundle", () => {
+  assert.match(
+    appSource,
+    /const \{[\s\S]*?\} = globalThis\.NikkeLayout \|\| \{\};/s,
+  );
+  assert.match(
+    appSource,
+    /if \(!globalThis\.NikkeLayout\) \{[\s\S]*?throw new Error\("NikkeLayout failed to load before app\.js"\);[\s\S]*?\}/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /from "\.\/ui\/layout\.js"/s,
+  );
+});
+
+test("index loads classic scripts so local file previews do not depend on module imports", () => {
+  assert.match(
+    indexSource,
+    /<script src="\.\/ui\/layout\.shared\.js"><\/script>\s*<script src="\.\/app\.js"><\/script>/s,
+  );
+  assert.doesNotMatch(
+    indexSource,
+    /<script type="module" src="\.\/app\.js"><\/script>/s,
   );
 });
 

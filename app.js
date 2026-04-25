@@ -1,4 +1,4 @@
-import {
+const {
   buildCollectionCardHeader,
   buildCompactStatusItems,
   clampFloatingDialogPosition,
@@ -21,7 +21,11 @@ import {
   getLayoutMode,
   getSummaryRenderMode,
   getStrategySelectionKey,
-} from "./ui/layout.js";
+} = globalThis.NikkeLayout || {};
+
+if (!globalThis.NikkeLayout) {
+  throw new Error("NikkeLayout failed to load before app.js");
+}
 
 const CHART_COLORS = [
   "#D35D3D",

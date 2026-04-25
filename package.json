@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "sync:nikke-data": "node scripts/sync-nikke-data.mjs",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests"
   }
 }
