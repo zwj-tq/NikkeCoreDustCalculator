@@ -93,6 +93,17 @@ test("bindEvents does not assume the detail strategy select always exists", () =
   );
 });
 
+test("default NO_BOX strategy remains the original 102后再开 preset", () => {
+  assert.match(
+    appSource,
+    /name:\s*"102后再开",\s*type:\s*"NO_BOX"[\s\S]*?note:\s*"先囤箱到 102 门槛解锁后，再统一开箱，适合稳健思路。"/s,
+  );
+  assert.match(
+    appSource,
+    /strategy\.type === "NO_BOX" && unlocked102 && boxes > 0[\s\S]*?strategyNote = "102后全开";/s,
+  );
+});
+
 test("getLayoutDensityTokens enlarges touch targets and typography on mobile", () => {
   const desktop = getLayoutDensityTokens("desktop");
   const mobile = getLayoutDensityTokens("mobile", 390);
