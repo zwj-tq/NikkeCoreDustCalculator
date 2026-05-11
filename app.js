@@ -258,6 +258,7 @@ const state = {
     { name: "每周补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每周", resourceType: "芯尘", amount: 0, enabled: true, note: "" },
     { name: "每月补充", startDate: DEFAULT_START_DATE, startDay: 0, endDay: 300, frequency: "每月", resourceType: "芯尘", amount: 0, enabled: true, note: "" },
   ],
+  hardlines: [],
   strategies: defaultStrategies(),
   results: {},
   summaries: [],
@@ -1627,12 +1628,14 @@ function renderListHeader(host, className, labels, includeAction = true) {
 
 function renderGenericRows(listId, rows, schema, onDelete, options = {}) {
   const host = document.getElementById(listId);
+  if (!host) return;
+  const safeRows = Array.isArray(rows) ? rows : [];
   host.innerHTML = "";
   host.classList.remove("mobile-editor-list");
   if (options.showHeader !== false) {
     renderListHeader(host, `editor-grid ${options.gridClass || ""}`.trim(), schema.map((field) => ({ label: field.label, columnClass: field.columnClass })));
   }
-  rows.forEach((row, index) => {
+  safeRows.forEach((row, index) => {
     const card = document.createElement("div");
     card.className = "editor-row";
     const grid = document.createElement("div");

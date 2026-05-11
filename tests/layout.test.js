@@ -152,6 +152,10 @@ test("initial calculator sample values remain populated", () => {
     appSource,
     /mainlines:\s*\[[\s\S]*?\{ chapter:\s*36,\s*date:[\s\S]*?\}[\s\S]*?\{ chapter:\s*44,\s*date:[\s\S]*?\}/s,
   );
+  assert.match(
+    appSource,
+    /events:\s*\[\],[\s\S]*?hardlines:\s*\[\],[\s\S]*?strategies:\s*defaultStrategies\(\)/s,
+  );
 });
 
 test("missing normal progress defaults to the current mainline chapter", () => {
