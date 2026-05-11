@@ -280,6 +280,7 @@ const state = {
 const mainlineTimelineChart = echarts.init(document.getElementById("mainline-timeline-chart"));
 const lineChart = echarts.init(document.getElementById("line-chart"));
 const barChart = echarts.init(document.getElementById("bar-chart"));
+const outpostDustChart = echarts.init(document.getElementById("outpost-dust-chart"));
 const toolbarActionsHost = document.getElementById("toolbar-actions");
 const toolbarStatusHost = document.getElementById("toolbar-status");
 const detailStrategySelect = document.getElementById("detail-strategy-select");
@@ -1431,6 +1432,9 @@ function renderParams() {
 }
 
 function renderDustReference() {
+  renderKnowledgeTips();
+  renderOutpostDustChart();
+
   const rangeBody = document.getElementById("dust-range-body");
   rangeBody.innerHTML = "";
   CORE_DUST_RANGES.forEach((row) => {
@@ -1439,6 +1443,79 @@ function renderDustReference() {
     tr.innerHTML = `<td>${label}</td><td>${row.cost}</td>`;
     rangeBody.appendChild(tr);
   });
+}
+
+function buildKnowledgeTips() {
+  return [
+    `每日小时数：基础 ${FIXED_BASE_DAILY_HOURS} 小时 + 免费扫荡 ${FIXED_FREE_SWEEPS} 次 + 购买扫荡次数，每次扫荡 ${FIXED_HOURS_PER_SWEEP} 小时。`,
+    mainlineEstimateTip(),
+    "困难推图：可登记到达等级后推进到的困难章节 BOSS；达到等级后会更新基地等级，并按新的小时芯尘继续模拟。",
+    "活动预设：每日 5 门票推进；只有 11 关产芯尘箱，normal 每次 2 箱，hard 每次 4 箱；hard 首日买票从 1 关推完，剩余门票扫荡 11 关。",
+    "额外来源：芯尘会在触发当天直接加入进度，芯尘箱会进入库存并继续按策略开箱。",
+    "策略：获得即开、完全不开、主线后开、最后一天全开；主线后开会在模拟最后一天补开剩余箱子。",
+    "芯尘消耗：页面表格展示 200+ 区间每级消耗，模拟内部仍按完整 1-200 与 200+ 规则计算。",
+  ];
+}
+
+function renderKnowledgeTips() {
+  const host = document.getElementById("knowledge-tips");
+  if (!host) return;
+  host.innerHTML = "";
+  buildKnowledgeTips().forEach((tip) => {
+    const item = document.createElement("li");
+    item.textContent = tip;
+    host.appendChild(item);
+  });
+}
+
+function renderOutpostDustChart() {
+  if (!outpostDustChart) return;
+  const rows = (state.nikkeData.outpostCoreDustMul || [])
+    .map((value, index) => ({ level: index, value: Number(value) }))
+    .filter((row) => row.level > 0 && Number.isFinite(row.value) && row.value > 0);
+
+  if (!rows.length) {
+    outpostDustChart.setOption({
+      title: { text: "暂无基地等级数据", left: "center", top: "middle" },
+      series: [],
+    }, true);
+    return;
+  }
+
+  outpostDustChart.setOption({
+    animation: true,
+    tooltip: {
+      trigger: "axis",
+      formatter: (params) => {
+        const item = params[0];
+        return `基地等级 ${item.data[0]}<br>小时芯尘 ${Number(item.data[1]).toFixed(2)}`;
+      },
+    },
+    grid: { left: 48, right: 18, top: 22, bottom: 36 },
+    xAxis: {
+      type: "value",
+      name: "基地等级",
+      min: rows[0].level,
+      max: rows.at(-1).level,
+      axisLabel: { color: "#607086" },
+      splitLine: { lineStyle: { color: "rgba(214, 224, 238, 0.8)" } },
+    },
+    yAxis: {
+      type: "value",
+      name: "小时芯尘",
+      axisLabel: { color: "#607086" },
+      splitLine: { lineStyle: { color: "rgba(214, 224, 238, 0.8)" } },
+    },
+    series: [{
+      type: "line",
+      name: "小时芯尘",
+      smooth: true,
+      showSymbol: false,
+      data: rows.map((row) => [row.level, row.value]),
+      lineStyle: { color: "#2F6FED", width: 3 },
+      areaStyle: { color: "rgba(47, 111, 237, 0.12)" },
+    }],
+  }, true);
 }
 
 function createField(label, value, onChange, options = {}) {
@@ -2597,6 +2674,7 @@ function bindCollapsible() {
       getSectionOpenOverrides(section.id)[currentLayoutMode] = nextOpen;
       syncCollapsibleSectionState(section, nextOpen);
       if (section.id === "section-mainlines") setTimeout(() => mainlineTimelineChart.resize(), 0);
+      if (section.id === "section-reference") setTimeout(() => outpostDustChart.resize(), 0);
       updateActiveNav();
     });
   });
@@ -2706,6 +2784,7 @@ function bindEvents() {
     mainlineTimelineChart.resize();
     lineChart.resize();
     barChart.resize();
+    outpostDustChart.resize();
     const nextLayoutMode = getCurrentLayoutMode();
     applyLayoutDensity(nextLayoutMode);
     if (hasLayoutModeChanged(currentLayoutMode, getCurrentViewportWidth())) {

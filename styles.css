@@ -691,6 +691,24 @@ select {
   font-size: 17px;
 }
 
+.knowledge-tips {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  color: #40516a;
+  line-height: 1.65;
+}
+
+.knowledge-tips li {
+  padding-left: 2px;
+}
+
+.reference-chart {
+  width: 100%;
+  height: 320px;
+}
+
 .subsection-head {
   margin-bottom: 12px;
 }

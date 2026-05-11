@@ -260,15 +260,23 @@
         </div>
       </section>
 
-      <section class="section-card collapsible" id="section-reference" data-nav-label="芯尘参考">
+      <section class="section-card collapsible" id="section-reference" data-nav-label="知识汇总">
         <button class="collapse-toggle" type="button">
           <span class="collapse-copy">
-            <span class="section-title">芯尘消耗参考</span>
-            <span class="section-desc">展示 200 级以上的每级芯尘消耗区间，模拟器内部仍按完整规则计算。</span>
+            <span class="section-title">知识汇总</span>
+            <span class="section-desc">汇总推图、活动、额外来源、开箱策略和芯尘消耗规则。</span>
           </span>
           <span class="collapse-icon">+</span>
         </button>
         <div class="collapse-body">
+          <div class="reference-card">
+            <h3>规则提示</h3>
+            <ul id="knowledge-tips" class="knowledge-tips"></ul>
+          </div>
+          <div class="reference-card">
+            <h3>基地等级与小时芯尘</h3>
+            <div id="outpost-dust-chart" class="reference-chart"></div>
+          </div>
           <div class="reference-card">
             <h3>200+ 区间每级消耗</h3>
             <div class="table-wrap">
