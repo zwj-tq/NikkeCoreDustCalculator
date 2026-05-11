@@ -99,7 +99,6 @@ const PERSISTED_PARAM_KEYS = [
   "startProgress",
   "startHourlyRate",
   "startBoxes",
-  "latestMainlineChapter",
   "currentNormalStageId",
   "currentHardStageId",
   "simulateDays",
@@ -110,7 +109,6 @@ const NON_EMPTY_PERSISTED_PARAM_KEYS = new Set([
   "startProgress",
   "startHourlyRate",
   "startBoxes",
-  "latestMainlineChapter",
   "simulateDays",
   "paidSweeps",
 ]);
@@ -205,7 +203,7 @@ function syncDateRange(changedKey) {
 }
 
 function mainlineChapterForIndex(index) {
-  return Number(state.params.latestMainlineChapter || 34) + 2 + index * 2;
+  return Number(state.params.currentMainlineChapter || 34) + 2 + index * 2;
 }
 
 function formatMainlineLabel(chapter) {
@@ -235,7 +233,6 @@ const state = {
     startProgress: 0,
     startHourlyRate: 79,
     startBoxes: 1800,
-    latestMainlineChapter: "34",
     currentNormalStageId: "",
     currentHardStageId: "",
     currentBaseLevel: 1,
@@ -562,7 +559,7 @@ function estimatedBossOptionForChapter(chapter, stats = buildChapterStageStats()
 function progressOptionsWithEstimatedFuture() {
   const stats = buildChapterStageStats();
   const options = [...(state.nikkeData.hardProgressOptions || [])];
-  const configuredMax = state.mainlines.reduce((max, item) => Math.max(max, Number(item.chapter || 0)), Number(state.params.latestMainlineChapter || 0));
+  const configuredMax = state.mainlines.reduce((max, item) => Math.max(max, Number(item.chapter || 0)), Number(state.params.currentMainlineChapter || 0));
   const maxChapter = Math.max(stats.latestChapter + 12, configuredMax);
   for (let chapter = stats.latestChapter + 1; chapter <= maxChapter; chapter += 1) {
     const option = estimatedBossOptionForChapter(chapter, stats);
@@ -586,6 +583,24 @@ function stageLabel(stageId, options = null) {
   return findStageLabelById(options || progressOptionsWithEstimatedFuture(), stageId) || "-";
 }
 
+function chapterProgressOptions(options) {
+  const chapters = [];
+  const seen = new Set();
+  (options || []).forEach((option) => {
+    const chapter = chapterFromStageLabel(option.label);
+    if (chapter == null || seen.has(chapter)) return;
+    seen.add(chapter);
+    chapters.push({ id: String(chapter), label: `${chapter}章` });
+  });
+  return chapters.sort((a, b) => Number(a.id) - Number(b.id));
+}
+
+function stageOptionsForChapter(chapter, options) {
+  const target = Number(chapter);
+  if (!target) return [];
+  return (options || []).filter((option) => chapterFromStageLabel(option.label) === target);
+}
+
 function mainlineEstimateTip() {
   const stats = buildChapterStageStats();
   if (!stats.recent.length) return "暂无章节统计数据";
@@ -594,26 +609,8 @@ function mainlineEstimateTip() {
   return `已统计 ${start}-${end} 章平均 ${stats.average.toFixed(1)} 关，后续按 ${stats.estimatedStagesPerChapter} 关/章估算`;
 }
 
-function getLatestMainlineChapterOptions() {
-  const maxChapter = Number(state.nikkeData.maxChapter || 0);
-  if (!maxChapter) return [];
-  const results = [];
-  for (let chapter = 2; chapter <= maxChapter; chapter += 1) {
-    results.push({
-      id: String(chapter),
-      label: `主线${chapter}章`,
-    });
-  }
-  return results;
-}
-
 function getStageOptionsWithinLatest(options) {
-  const latestChapter = Number(state.params.latestMainlineChapter || 0);
-  if (!latestChapter) return options || [];
-  return (options || []).filter((item) => {
-    const chapter = chapterFromStageLabel(item.label);
-    return chapter != null && chapter <= latestChapter;
-  });
+  return options || [];
 }
 
 function computeOutpostLevel(normalStageId, hardStageId) {
@@ -643,14 +640,6 @@ function syncDerivedProgressData() {
   const normalOptions = getStageOptionsWithinLatest(state.nikkeData.normalProgressOptions || []);
   const hardOptions = progressOptionsWithEstimatedFuture();
   if (!normalOptions.length) return;
-
-  const maxChapter = Number(state.nikkeData.maxChapter || 0);
-  if (!state.params.latestMainlineChapter && maxChapter) {
-    state.params.latestMainlineChapter = String(maxChapter);
-  }
-  if (maxChapter && Number(state.params.latestMainlineChapter || 0) > maxChapter) {
-    state.params.latestMainlineChapter = String(maxChapter);
-  }
 
   if (state.params.currentHardStageId && !findStageLabelById(hardOptions, state.params.currentHardStageId)) {
     state.params.currentHardStageId = "";
@@ -1353,14 +1342,56 @@ function renderParams() {
       state.params[key] = event.target.value;
       syncDerivedProgressData();
       persistParamsToStorage();
-      if (key === "latestMainlineChapter") {
-        renderParams();
-      }
       refreshParamDerivedOutputs(host);
       renderMainlineTimeline();
     });
     field.appendChild(select);
     host.appendChild(field);
+  };
+
+  const addHardProgressInputs = () => {
+    const hardOptions = state.nikkeData.hardProgressOptions || [];
+    const currentLabel = findStageLabelById(hardOptions, state.params.currentHardStageId);
+    const selectedChapter = chapterFromStageLabel(currentLabel) || "";
+    const chapterOptions = chapterProgressOptions(hardOptions);
+    const stageOptions = selectedChapter ? stageOptionsForChapter(selectedChapter, hardOptions) : [];
+
+    const addSelect = (label, value, options, onChange, allowEmpty = true) => {
+      const field = document.createElement("label");
+      field.className = "field";
+      field.innerHTML = `<span>${label}</span>`;
+      const select = document.createElement("select");
+      if (allowEmpty) {
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "未选择";
+        select.appendChild(empty);
+      }
+      options.forEach((option) => {
+        const el = document.createElement("option");
+        el.value = option.id;
+        el.textContent = option.label;
+        if (String(option.id) === String(value || "")) el.selected = true;
+        select.appendChild(el);
+      });
+      select.addEventListener("change", (event) => {
+        onChange(event.target.value);
+        syncDerivedProgressData();
+        persistParamsToStorage();
+        renderParams();
+        renderMainlineTimeline();
+      });
+      field.appendChild(select);
+      host.appendChild(field);
+    };
+
+    addSelect("当前困难章节", selectedChapter ? String(selectedChapter) : "", chapterOptions, (chapter) => {
+      const nextStages = stageOptionsForChapter(chapter, hardOptions);
+      state.params.currentHardStageId = nextStages[0]?.id || "";
+    });
+    addSelect("当前困难关卡", state.params.currentHardStageId, stageOptions, (stageId) => {
+      state.params.currentHardStageId = stageId;
+    });
   };
 
   const addReadonlyInput = (label, outputKey, value, options = {}) => {
@@ -1381,15 +1412,11 @@ function renderParams() {
   addEditableInput("当前级内进度", "startProgress", "float");
   addEditableInput("拥有芯尘箱（小时）", "startBoxes", "float");
   addReadonlyInput("升级芯尘", "nextCost", state.params.startLevel === "" ? "" : String(getCoreDustCostForNextLevel(state.params.startLevel)));
-  const latestMainlineOptions = getLatestMainlineChapterOptions();
-  if (latestMainlineOptions.length) {
-    addStageInput("当前最新主线", "latestMainlineChapter", latestMainlineOptions, false);
-  }
   addRowBreak();
 
   if (state.nikkeData.normalProgressOptions.length) {
     addStageInput("当前普通主线进度", "currentNormalStageId", getStageOptionsWithinLatest(state.nikkeData.normalProgressOptions), true);
-    addStageInput("当前困难主线进度", "currentHardStageId", getStageOptionsWithinLatest(state.nikkeData.hardProgressOptions), true);
+    addHardProgressInputs();
     addReadonlyInput("当前基地等级", "currentBaseLevel", state.params.currentBaseLevel === "" ? "" : String(state.params.currentBaseLevel));
     addReadonlyInput("当前小时芯尘", "startHourlyRate", state.params.startHourlyRate === "" ? "" : toFiniteNumber(state.params.startHourlyRate, 0).toFixed(2));
   } else {
@@ -2048,9 +2075,10 @@ function renderEventsEditor() {
   if (state.activityConfig.mode === ACTIVITY_EDITOR_MODES.PRESET) {
     const note = document.createElement("div");
     note.className = "events-preset-note";
-    note.textContent = "预设节奏：每 42 天约 1 个 21 天大型活动（约获得 472 小时芯尘箱），每 28 天约 1 个 14 天小活动（约获得 324 小时芯尘箱）；折算为每 42 天约 1 个大型活动 + 1.5 个小活动。";
+    note.textContent = "预设：小活动约 324 箱，大活动约 472 箱。每日 5 门票推进；11 关产箱，normal 每次 2 箱、hard 每次 4 箱。hard 首日买票从 1 关推完，剩余门票扫荡 11 关。";
     host.appendChild(controls);
     host.appendChild(note);
+    renderPresetActivityPreview(host, buildPresetActivities());
     return;
   }
 
@@ -2094,6 +2122,43 @@ function renderEventsEditor() {
     state.events.splice(index, 1);
     renderEventsEditor();
   }, { showHeader: false, gridClass: "events-grid" });
+}
+
+function renderPresetActivityPreview(host, rows) {
+  const totalBoxes = rows.reduce((sum, row) => sum + Number(row.boxes || 0), 0);
+  const summary = document.createElement("details");
+  summary.className = "preset-activity-preview";
+  summary.innerHTML = `<summary>预设明细：${rows.length} 个产箱节点，共 ${totalBoxes.toFixed(0)} 箱</summary>`;
+  host.appendChild(summary);
+
+  const list = document.createElement("div");
+  list.className = "preset-activity-list";
+  summary.appendChild(list);
+
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "events-preset-note";
+    empty.textContent = "当前模拟区间内暂无预设活动箱子。";
+    list.appendChild(empty);
+    return;
+  }
+
+  rows.forEach((row) => {
+    const card = document.createElement("div");
+    card.className = "preset-activity-row";
+
+    const name = document.createElement("strong");
+    name.textContent = row.name;
+
+    const date = document.createElement("span");
+    date.textContent = row.startDate;
+
+    const boxes = document.createElement("span");
+    boxes.textContent = `${Number(row.boxes || 0).toFixed(0)} 箱`;
+
+    card.append(name, date, boxes);
+    list.appendChild(card);
+  });
 }
 
 function renderHardlinesEditor() {

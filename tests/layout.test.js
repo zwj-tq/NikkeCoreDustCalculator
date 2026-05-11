@@ -146,7 +146,7 @@ test("default strategies use the current fixed Chinese strategy set", () => {
 test("initial calculator sample values remain populated", () => {
   assert.match(
     appSource,
-    /params:\s*\{[\s\S]*?startLevel:\s*378,[\s\S]*?startProgress:\s*0,[\s\S]*?startHourlyRate:\s*79,[\s\S]*?startBoxes:\s*1800,[\s\S]*?latestMainlineChapter:\s*"34",[\s\S]*?currentBaseLevel:\s*1,[\s\S]*?currentMainlineChapter:\s*34,/s,
+    /params:\s*\{[\s\S]*?startLevel:\s*378,[\s\S]*?startProgress:\s*0,[\s\S]*?startHourlyRate:\s*79,[\s\S]*?startBoxes:\s*1800,[\s\S]*?currentNormalStageId:\s*"",[\s\S]*?currentHardStageId:\s*"",[\s\S]*?currentBaseLevel:\s*1,[\s\S]*?currentMainlineChapter:\s*34,/s,
   );
   assert.match(
     appSource,
@@ -165,10 +165,19 @@ test("missing normal progress defaults to the current mainline chapter", () => {
   );
 });
 
+test("latest mainline field is hidden and hard progress uses chapter plus stage selects", () => {
+  assert.doesNotMatch(appSource, /当前最新主线/);
+  assert.doesNotMatch(appSource, /latestMainlineChapter/);
+  assert.match(appSource, /addSelect\("当前困难章节"/s);
+  assert.match(appSource, /addSelect\("当前困难关卡"/s);
+  assert.match(appSource, /function chapterProgressOptions\(options\)/s);
+  assert.match(appSource, /function stageOptionsForChapter\(chapter, options\)/s);
+});
+
 test("empty persisted params cannot overwrite populated defaults", () => {
   assert.match(
     appSource,
-    /const NON_EMPTY_PERSISTED_PARAM_KEYS = new Set\(\[[\s\S]*?"startLevel"[\s\S]*?"startBoxes"[\s\S]*?"latestMainlineChapter"[\s\S]*?\]\);/s,
+    /const NON_EMPTY_PERSISTED_PARAM_KEYS = new Set\(\[[\s\S]*?"startLevel"[\s\S]*?"startProgress"[\s\S]*?"startHourlyRate"[\s\S]*?"startBoxes"[\s\S]*?\]\);/s,
   );
   assert.match(
     appSource,
