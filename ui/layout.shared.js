@@ -299,9 +299,12 @@ function buildDetailTableCells(row) {
     Number(row.hourlyRate || 0).toFixed(2),
     Number(row.boxes || 0).toFixed(0),
     Number(row.openedBoxesToday || 0).toFixed(0),
+    Number(row.activityBoxes || 0).toFixed(0),
     Number(row.dailyDust || 0).toFixed(0),
-    Number(row.extraBoxes || 0).toFixed(0),
     Number(row.extraDust || 0).toFixed(0),
+    Number(row.extraBoxes || 0).toFixed(0),
+    String(row.hardProgressLabel || "-"),
+    String(row.outpostBaseLevel ?? "-"),
     String(row.strategyNote || ""),
   ];
 }
@@ -311,8 +314,6 @@ function buildCollectionCardFields(kind, row) {
     return [
       { key: "name", label: "名称", value: row.name ?? "" },
       { key: "type", label: "类型", value: row.type ?? "" },
-      { key: "targetDay", label: "目标天", value: row.targetDay ?? "" },
-      { key: "targetLevel", label: "目标级", value: row.targetLevel ?? "" },
       { key: "note", label: "备注", value: row.note ?? "" },
       { key: "enabled", label: "启用", value: Boolean(row.enabled) },
     ];

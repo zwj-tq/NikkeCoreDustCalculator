@@ -120,26 +120,26 @@ test("bindEvents does not assume the detail strategy select always exists", () =
   );
 });
 
-test("default NO_BOX strategy remains the original gate-after-open preset", () => {
+test("default strategies use the current fixed Chinese strategy set", () => {
   assert.match(
     appSource,
-    /name:\s*"门槛后再开",\s*type:\s*"NO_BOX"[\s\S]*?note:\s*"先囤箱到主线门槛解锁后，再统一开箱，适合稳健思路。"/s,
+    /name:\s*"获得即开",\s*type:\s*"获得即开"[\s\S]*?name:\s*"完全不开",\s*type:\s*"完全不开"[\s\S]*?name:\s*"主线后开",\s*type:\s*"主线后开"[\s\S]*?name:\s*"最后一天全开",\s*type:\s*"最后一天全开"/s,
   );
   assert.match(
     appSource,
-    /function simulate\(strategy\)[\s\S]*?let gateUnlockDay = null;/s,
+    /strategy\.type === "获得即开" && boxes > 0/s,
   );
   assert.match(
     appSource,
-    /if \(gateUnlockDay == null && activeGateLevel != null && level >= activeGateLevel\) \{[\s\S]*?gateUnlockDay = day;[\s\S]*?strategyNote = `\$\{strategyNote\} \| 达到门槛`/s,
+    /strategy\.type === "主线后开" && \(releasedToday\.length \|\| day === state\.params\.simulateDays\) && boxes > 0/s,
   );
   assert.match(
     appSource,
-    /strategy\.type === "NO_BOX" && gateUnlockDay != null && boxes > 0[\s\S]*?strategyNote = "门槛后全开";/s,
+    /strategy\.type === "最后一天全开" && day === state\.params\.simulateDays && boxes > 0/s,
   );
   assert.match(
     appSource,
-    /states\.push\(\{[\s\S]*?gateUnlocked: gateUnlockDay != null,[\s\S]*?gateUnlockDay,[\s\S]*?strategyNote,/s,
+    /openBoxesWithDynamicRate\(boxes\)/s,
   );
 });
 
@@ -150,7 +150,7 @@ test("initial calculator sample values remain populated", () => {
   );
   assert.match(
     appSource,
-    /mainlines:\s*\[[\s\S]*?\{ chapter:\s*36,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*null \}[\s\S]*?\{ chapter:\s*40,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*501 \}[\s\S]*?\{ chapter:\s*42,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*481 \}[\s\S]*?\{ chapter:\s*44,[\s\S]*?rateBonus:\s*2,\s*gateLevel:\s*441 \}/s,
+    /mainlines:\s*\[[\s\S]*?\{ chapter:\s*36,\s*date:[\s\S]*?\}[\s\S]*?\{ chapter:\s*44,\s*date:[\s\S]*?\}/s,
   );
 });
 
@@ -172,7 +172,7 @@ test("empty persisted params cannot overwrite populated defaults", () => {
   );
   assert.match(
     appSource,
-    /if \(NON_EMPTY_PERSISTED_PARAM_KEYS\.has\(key\) && parsed\[key\] === ""\) return;/s,
+    /if \(NON_EMPTY_PERSISTED_PARAM_KEYS\.has\(key\) && savedParams\[key\] === ""\) return;/s,
   );
 });
 
@@ -489,18 +489,14 @@ test("buildToolbarActionGroups keeps export actions visible on desktop", () => {
 test("buildCollectionCardFields returns strategy fields in mobile order", () => {
   const fields = buildCollectionCardFields("strategies", {
     name: "冲榜",
-    type: "TARGET_LEVEL",
-    targetDay: 30,
-    targetLevel: 320,
+    type: "主线后开",
     note: "优先冲等级",
     enabled: true,
   });
 
   assert.deepEqual(fields, [
     { key: "name", label: "名称", value: "冲榜" },
-    { key: "type", label: "类型", value: "TARGET_LEVEL" },
-    { key: "targetDay", label: "目标天", value: 30 },
-    { key: "targetLevel", label: "目标级", value: 320 },
+    { key: "type", label: "类型", value: "主线后开" },
     { key: "note", label: "备注", value: "优先冲等级" },
     { key: "enabled", label: "启用", value: true },
   ]);
@@ -599,9 +595,12 @@ test("buildDetailTableCells returns plain text values for rendering", () => {
     hourlyRate: 52.5,
     boxes: 88,
     openedBoxesToday: 3,
+    activityBoxes: 4,
     dailyDust: 412,
-    extraBoxes: 9,
     extraDust: 120,
+    extraBoxes: 9,
+    hardProgressLabel: "31-36 BOSS",
+    outpostBaseLevel: 438,
     strategyNote: "<b>活动补给</b>",
   });
 
@@ -613,9 +612,12 @@ test("buildDetailTableCells returns plain text values for rendering", () => {
     "52.50",
     "88",
     "3",
+    "4",
     "412",
-    "9",
     "120",
+    "9",
+    "31-36 BOSS",
+    "438",
     "<b>活动补给</b>",
   ]);
 });
@@ -635,18 +637,18 @@ test("extra sources distinguish boxes from dust in simulation flow", () => {
   );
 });
 
-test("mainline modal exposes gate level editing and tooltip output", () => {
-  assert.match(
+test("mainline modal no longer exposes gate level editing and tooltip shows estimated progress", () => {
+  assert.doesNotMatch(
     appSource,
-    /<span class="field-label">门槛等级<\/span>[\s\S]*?id="mainline-modal-gate"[\s\S]*?placeholder="留空表示无门槛"/s,
+    /id="mainline-modal-gate"/s,
   );
   assert.match(
     appSource,
-    /bindValue\("mainline-modal-gate",[\s\S]*?current\.gateLevel = parseOptionalInt\(value\);/s,
+    /普通进度：\$\{progressOption\?\.label \|\| "-"\}/s,
   );
   assert.match(
     appSource,
-    /const gateText = item\.gateLevel == null \? "无" : item\.gateLevel;[\s\S]*?门槛等级：\$\{gateText\}/s,
+    /预计基地等级：\$\{baseLevel\}/s,
   );
 });
 
@@ -670,16 +672,14 @@ test("ensureStrategyIds preserves ids and fills unique ids for duplicate names",
 test("buildMobileCollectionCardFields keeps strategy enabled state in the header instead of the body", () => {
   const fields = buildMobileCollectionCardFields("strategies", {
     name: "保底",
-    type: "BASELINE",
-    targetDay: null,
-    targetLevel: null,
+    type: "完全不开",
     note: "",
     enabled: true,
   });
 
   assert.deepEqual(
     fields.map((field) => field.key),
-    ["name", "type", "targetDay", "targetLevel", "note"],
+    ["name", "type", "note"],
   );
 });
 

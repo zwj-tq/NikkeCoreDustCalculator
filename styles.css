@@ -496,12 +496,19 @@ select {
 }
 
 .events-preset-note {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 12px 14px;
   border-radius: 14px;
   background: #f7faff;
   border: 1px solid rgba(214, 224, 238, 0.95);
   color: #607086;
   font-size: 13px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .mainline-chart {
@@ -815,7 +822,12 @@ select {
 }
 
 .editor-grid.strategies-grid {
-  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(220px, 1.5fr) 38px;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(260px, 1.8fr) 38px;
+  align-items: stretch;
+}
+
+.editor-grid.hardlines-grid {
+  grid-template-columns: minmax(140px, 0.8fr) minmax(260px, 1.6fr) 38px;
   align-items: stretch;
 }
 
@@ -832,6 +844,12 @@ select {
 }
 
 .editor-grid.strategies-grid .icon-btn {
+  justify-self: end;
+  align-self: end;
+  margin-bottom: 0;
+}
+
+.editor-grid.hardlines-grid .icon-btn {
   justify-self: end;
   align-self: end;
   margin-bottom: 0;
@@ -1286,6 +1304,16 @@ tbody tr:hover {
   background: #fcfdff;
 }
 
+.detail-wrap thead th:last-child,
+.detail-wrap .detail-note-cell {
+  width: 240px;
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
 .summary-mobile-list,
 .detail-mobile-list {
   display: grid;
@@ -1391,7 +1419,15 @@ tbody tr:hover {
   }
 
   .editor-grid.extras-grid {
-    grid-template-columns: minmax(160px, 1.3fr) minmax(170px, 1.05fr) minmax(120px, 0.8fr) minmax(120px, 0.75fr) minmax(180px, 1.2fr) 38px;
+    grid-template-columns: minmax(160px, 1.15fr) minmax(168px, 1fr) minmax(110px, 0.78fr) minmax(110px, 0.78fr) minmax(110px, 0.72fr) minmax(180px, 1.15fr) 38px;
+  }
+
+  .editor-grid.strategies-grid {
+    grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(260px, 1.8fr) 38px;
+  }
+
+  .editor-grid.hardlines-grid {
+    grid-template-columns: minmax(140px, 0.8fr) minmax(260px, 1.6fr) 38px;
   }
 
   .editor-grid.strategies-grid {
@@ -1470,6 +1506,10 @@ tbody tr:hover {
   }
 
   .editor-grid.strategies-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-grid.hardlines-grid {
     grid-template-columns: 1fr;
   }
 

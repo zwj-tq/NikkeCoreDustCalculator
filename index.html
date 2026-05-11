@@ -54,7 +54,7 @@
         <button class="collapse-toggle" type="button">
           <span class="collapse-copy">
             <span class="section-title">主线更新</span>
-            <span class="section-desc">默认每次更新主线芯尘获取量 +2.5，可按实际情况自行修改。</span>
+            <span class="section-desc">登记普通主线更新日期，后续章节按现有章节平均关卡数估算。</span>
           </span>
           <span class="collapse-icon">−</span>
         </button>
@@ -66,6 +66,22 @@
             <div id="mainline-timeline-chart" class="mainline-chart"></div>
             <div id="mainline-editor" class="mainline-editor"></div>
           </div>
+        </div>
+      </section>
+
+      <section class="section-card collapsible is-open" id="section-hardlines" data-nav-label="困难推图">
+        <button class="collapse-toggle" type="button">
+          <span class="collapse-copy">
+            <span class="section-title">困难推图</span>
+            <span class="section-desc">登记到达等级后可推进到的困难章节 BOSS。</span>
+          </span>
+          <span class="collapse-icon">−</span>
+        </button>
+        <div class="collapse-body">
+          <div class="section-toolbar">
+            <button data-add="hardlines" class="small-btn" type="button">新增困难推图</button>
+          </div>
+          <div id="hardlines-list" class="editor-list"></div>
         </div>
       </section>
 
@@ -187,9 +203,12 @@
                   <th>小时量</th>
                   <th>箱子</th>
                   <th>当日开箱</th>
+                  <th>活动箱子</th>
                   <th>日常芯尘</th>
-                  <th>额外箱子</th>
                   <th>额外芯尘</th>
+                  <th>额外箱子</th>
+                  <th>困难进度</th>
+                  <th>基地等级</th>
                   <th>说明</th>
                 </tr>
               </thead>
